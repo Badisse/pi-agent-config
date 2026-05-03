@@ -1,0 +1,84 @@
+#!/bin/bash
+# ralph/init-project.sh — Initialize ralph/ directory in the current project
+# Usage: ralph/init-project.sh
+#
+# Creates a ralph/ directory in the current project with:
+#   - Symlinks to the global ralph scripts (afk.sh, afk-local.sh, once.sh)
+#   - A project-specific prompt.md (if one doesn't exist)
+#   - A .dockerignore update
+#
+# Then runs /skill:setup-matt-pocock-skills if not already set up.
+
+set -eo pipefail
+
+GLOBAL_RALPH="$HOME/.pi/agent/ralph"
+PROJECT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+RALPH_DIR="$PROJECT_DIR/ralph"
+
+echo "╔══════════════════════════════════════╗"
+echo "║  Ralph — Project Initialization      ║"
+echo "╚══════════════════════════════════════╝"
+echo ""
+echo "Project: $PROJECT_DIR"
+echo ""
+
+# Create ralph/ directory
+mkdir -p "$RALPH_DIR"
+
+# Copy scripts as symlinks to global versions
+for script in afk.sh afk-local.sh once.sh; do
+  if [ ! -e "$RALPH_DIR/$script" ]; then
+    ln -s "$GLOBAL_RALPH/$script" "$RALPH_DIR/$script"
+    echo "  ✅ Linked $script → global"
+  else
+    echo "  ⏭️  $script already exists"
+  fi
+done
+
+# Copy prompt.md if it doesn't exist
+if [ ! -f "$RALPH_DIR/prompt.md" ]; then
+  cp "$GLOBAL_RALPH/prompt.md" "$RALPH_DIR/prompt.md"
+  echo "  ✅ Created prompt.md (project-specific, edit as needed)"
+else
+  echo "  ⏭️  prompt.md already exists"
+fi
+
+# Update .gitignore
+if [ -f "$PROJECT_DIR/.gitignore" ]; then
+  if ! grep -q "^ralph/$" "$PROJECT_DIR/.gitignore"; then
+    echo "" >> "$PROJECT_DIR/.gitignore"
+    echo "# Ralph loop scripts and state" >> "$PROJECT_DIR/.gitignore"
+    echo "ralph/" >> "$PROJECT_DIR/.gitignore"
+    echo "  ✅ Added ralph/ to .gitignore"
+  else
+    echo "  ⏭️  .gitignore already excludes ralph/"
+  fi
+else
+  echo "ralph/" > "$PROJECT_DIR/.gitignore"
+  echo "  ✅ Created .gitignore with ralph/"
+fi
+
+# Check if docs/agents/ setup exists (setup-matt-pocock-skills has been run)
+if [ ! -d "$PROJECT_DIR/docs/agents" ]; then
+  echo ""
+  echo "⚠️  Matt's skills not configured for this project yet."
+  echo "   Run /skill:setup-matt-pocock-skills in Pi to configure:"
+  echo "   - Issue tracker (GitHub Issues)"
+  echo "   - Triage labels (needs-triage, ready-for-agent, etc.)"
+  echo "   - Domain docs (CONTEXT.md, docs/adr/)"
+else
+  echo "  ✅ Matt's skills already configured (docs/agents/ exists)"
+fi
+
+echo ""
+echo "╔══════════════════════════════════════╗"
+echo "║  ✅ Ralph initialized for project     ║"
+echo "╚══════════════════════════════════════╝"
+echo ""
+echo "Next steps:"
+echo "  1. Open Pi: pi"
+echo "  2. /skill:grill-me (or /skill:grill-with-docs)"
+echo "  3. /skill:to-prd"
+echo "  4. /skill:to-issues"
+echo "  5. /skill:triage (label issues as ready-for-agent)"
+echo "  6. ralph/afk.sh 20 (autonomous) or ralph/once.sh (interactive)"

@@ -1,0 +1,8 @@
+# Pi config — do not commit
+auth.json
+pi-crash.log
+sessions/
+bin/
+
+# OS
+.DS_Store
