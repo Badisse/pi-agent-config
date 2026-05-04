@@ -18,7 +18,7 @@
  *   - Package installs (npm install, pip install, brew install)
  *   - Outbound network with data upload/mutating methods (curl/wget -d/-X POST/etc., nc)
  *   - System modifications (launchctl, defaults write, crontab, xattr)
- *   - Git push to main/master (strong warning)
+ *   - Git push to main/master (strong warning, detects implicit bare push on main)
  *
  * Auto-allowed:
  *   - Everything else (ls, cat, grep, git status, etc.)
@@ -144,8 +144,30 @@ function checkEnvAccess(command: string): { blocked: boolean; prompt?: string; r
 	return { blocked: false };
 }
 
-// ── Git push to main (always blocked) ────────────────────────
-const GIT_PUSH_MAIN = /\bgit\s+push\b.*\b(main|master)\b/i;
+// ── Git push to main ─────────────────────────────────────────
+const GIT_PUSH_ANY = /\bgit\s+push\b/i;
+const GIT_PUSH_MAIN_EXPLICIT = /\bgit\s+push\b.*\b(main|master)\b/i;
+const PROTECTED_BRANCHES = new Set(["main", "master"]);
+
+async function isPushToProtectedBranch(command: string, ctx: any): Promise<boolean> {
+	// 1. Explicit branch name in command
+	if (GIT_PUSH_MAIN_EXPLICIT.test(command)) return true;
+	if (!GIT_PUSH_ANY.test(command)) return false;
+
+	// 2. Bare git push or indirect ref — detect actual current branch
+	//    Only check when branch isn't explicitly named in the push command
+	const hasExplicitBranch = /\bgit\s+push\s+\S+\s+(?!HEAD)(?!--)/.test(command) && !/(?:^|\s)git\s+push\s*$/.test(command);
+	if (hasExplicitBranch && !GIT_PUSH_MAIN_EXPLICIT.test(command)) return false;
+
+	try {
+		const result = await ctx.exec("git", ["branch", "--show-current"], { timeout: 3000 });
+		const branch = result.stdout.trim();
+		return PROTECTED_BRANCHES.has(branch);
+	} catch {
+		// Can't detect branch — assume protected to be safe
+		return true;
+	}
+}
 
 // ── Docker detection ──────────────────────────────────────────
 let _isDocker: boolean | undefined;
@@ -217,22 +239,25 @@ Allow the model to read this env var?`,
 			return undefined;
 		}
 
-		// 3. Git push to main — strong warning (blocked in AFK)
-		if (GIT_PUSH_MAIN.test(command)) {
-			if (isTrustedAFK(ctx)) {
-				ctx.ui.notify("🚫 Push to main/master blocked in AFK mode", "error");
-				return { block: true, reason: `Push to main/master blocked in AFK: ${command}` };
-			}
-			if (!ctx.hasUI) {
-				return { block: true, reason: "Push to main/master blocked (no UI)" };
-			}
-			const choice = await ctx.ui.select(
-				`🚨 PUSHING TO MAIN/MASTER BRANCH!\n\n  ${truncate(command, 200)}\n\nThis is usually not recommended.`,
-				["No, block it", "Yes, I know what I'm doing"],
-			);
-			if (choice !== "Yes, I know what I'm doing") {
-				ctx.ui.notify("🚫 Push to main blocked", "warning");
-				return { block: true, reason: "Push to main blocked by user" };
+		// 3. Git push to main — detect implicit pushes to protected branches
+		if (GIT_PUSH_ANY.test(command)) {
+			const targetsProtected = await isPushToProtectedBranch(command, ctx);
+			if (targetsProtected) {
+				if (isTrustedAFK(ctx)) {
+					ctx.ui.notify("🚫 Push to main/master blocked in AFK mode", "error");
+					return { block: true, reason: `Push to main/master blocked in AFK: ${command}` };
+				}
+				if (!ctx.hasUI) {
+					return { block: true, reason: "Push to main/master blocked (no UI)" };
+				}
+				const choice = await ctx.ui.select(
+					`🚨 PUSHING TO MAIN/MASTER BRANCH!\n\n  ${truncate(command, 200)}\n\nThis is usually not recommended.`,
+					["No, block it", "Yes, I know what I'm doing"],
+				);
+				if (choice !== "Yes, I know what I'm doing") {
+					ctx.ui.notify("🚫 Push to main blocked", "warning");
+					return { block: true, reason: "Push to main blocked by user" };
+				}
 			}
 			return undefined;
 		}
