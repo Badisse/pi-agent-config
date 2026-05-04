@@ -27,7 +27,7 @@ Protects against destructive, suspicious, and sensitive bash commands, and preve
 | Package installs | `npm install`, `pip install`, `brew install` |
 | Network with data upload | `curl -d`, `curl -X POST`, `nc` |
 | System modifications | `launchctl`, `defaults write`, `crontab`, `xattr` |
-| Git push to main/master | Strong warning, can override |
+| Git push to main/master | Strong warning, can override. Detects bare `git push` on main branch via `git branch --show-current` |
 
 ## Auto-allowed
 
@@ -62,7 +62,7 @@ The extension hooks into `tool_call` events for the `bash` tool. For each comman
 
 1. Check against hard-blocked patterns → deny immediately (always, even in AFK)
 2. Check environment variable access → deny sensitive, prompt for non-sensitive
-3. Check for `git push` to main → always block (even in AFK)
+3. Check for `git push` to main/master — detects both explicit (`git push origin main`) and implicit bare `git push` by running `git branch --show-current`. Blocked in AFK, strong warning + override in interactive.
 4. Check against prompted patterns → prompt user (AFK mode auto-allows)
 5. All other commands → auto-allow
 
