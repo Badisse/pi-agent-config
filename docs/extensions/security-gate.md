@@ -64,8 +64,23 @@ This means the model can **never** see any env var value without your explicit a
 
 The extension hooks into `tool_call` events for the `bash` tool. For each command:
 
-1. Check against hard-blocked patterns → deny immediately
-2. Check environment variable access → deny if sensitive
-3. Check for `git push` to main → strong warning with select menu
-4. Check against prompted patterns → show approval menu
+1. Check against hard-blocked patterns → deny immediately (always, even in AFK)
+2. Check environment variable access → deny sensitive, prompt for non-sensitive
+3. Check for `git push` to main → always block (even in AFK)
+4. Check against prompted patterns → prompt user (AFK mode auto-allows)
 5. All other commands → auto-allow
+
+### AFK mode (Ralph)
+
+When Pi runs without a UI (Ralph AFK mode: `--mode text --no-session`), prompted commands are **auto-allowed** since there's no way to show the user a dialog. Hard-blocks still apply:
+
+| Category | Interactive | AFK (Ralph) |
+|---|---|---|
+| Hard-blocked (`rm -rf`, `sudo`) | 🚫 Blocked | 🚫 Blocked |
+| Sensitive env vars | 🚫 Blocked | 🚫 Blocked |
+| Env dump commands | 🚫 Blocked | 🚫 Blocked |
+| Git push to main | 🚫 Blocked | 🚫 Blocked |
+| Non-sensitive env vars | 🔑 Prompt | ✅ Auto-allow |
+| Package installs | 🔑 Prompt | ✅ Auto-allow |
+| Network (data upload) | 🔑 Prompt | ✅ Auto-allow |
+| Other commands | ✅ Auto-allow | ✅ Auto-allow |

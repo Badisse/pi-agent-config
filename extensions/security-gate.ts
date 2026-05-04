@@ -177,9 +177,8 @@ export default function (pi: ExtensionAPI) {
 			return { block: true, reason: `${envCheck.reason}: ${command}` };
 		}
 		if (envCheck.prompt) {
-			if (!ctx.hasUI) {
-				return { block: true, reason: `${envCheck.prompt} (no UI for confirmation)` };
-			}
+			// AFK mode (no UI) — auto-allow non-sensitive env vars
+			if (!ctx.hasUI) return undefined;
 			const choice = await ctx.ui.select(
 				`${envCheck.prompt}:
 
@@ -195,28 +194,17 @@ Allow the model to read this env var?`,
 			return undefined;
 		}
 
-		// 3. Git push to main — strong warning
+		// 3. Git push to main — always block (even in AFK)
 		if (GIT_PUSH_MAIN.test(command)) {
-			if (!ctx.hasUI) {
-				return { block: true, reason: "Push to main/master blocked (no UI)" };
-			}
-			const choice = await ctx.ui.select(
-				`🚨 PUSHING TO MAIN/MASTER BRANCH!\n\n  ${truncate(command, 200)}\n\nThis is usually not recommended.`,
-				["No, block it", "Yes, I know what I'm doing"],
-			);
-			if (choice !== "Yes, I know what I'm doing") {
-				ctx.ui.notify("🚫 Push to main blocked", "warning");
-				return { block: true, reason: "Push to main blocked by user" };
-			}
-			return undefined;
+			ctx.ui.notify("🚫 Push to main/master blocked", "error");
+			return { block: true, reason: `Push to main/master blocked: ${command}` };
 		}
 
-		// 4. Prompted categories — user decides
+		// 4. Prompted categories — user decides (AFK auto-allows)
 		for (const { pattern, label } of PROMPTED) {
 			if (pattern.test(command)) {
-				if (!ctx.hasUI) {
-					return { block: true, reason: `${label} (no UI for confirmation)` };
-				}
+				// AFK mode (no UI) — auto-allow prompted commands
+				if (!ctx.hasUI) return undefined;
 				const choice = await ctx.ui.select(
 					`${label}:\n\n  ${truncate(command, 200)}\n\nAllow execution?`,
 					["Yes, run it", "No, block it"],
