@@ -4,5 +4,8 @@ pi-crash.log
 sessions/
 bin/
 
+# Docs build
+site/
+
 # OS
 .DS_Store

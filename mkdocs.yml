@@ -1,0 +1,125 @@
+site_name: Pi Agent Config
+site_description: Complete documentation for my Pi coding agent configuration, skills, extensions, and autonomous workflows.
+site_url: https://badisse.github.io/pi-agent-config/
+repo_url: https://github.com/Badisse/pi-agent-config
+repo_name: Badisse/pi-agent-config
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.indexes
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+  icon:
+    repo: fontawesome/brands/github
+  favicon: assets/favicon.png
+  custom_dir: docs/overrides
+
+plugins:
+  - search
+  - minify:
+      minify_html: true
+  - redirects:
+      redirect_maps: {}
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+      toc_depth: 3
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - getting-started/index.md
+      - Installation: getting-started/installation.md
+      - Project Setup: getting-started/project-setup.md
+  - Workflows:
+      - workflows/index.md
+      - Full Feature: workflows/full-feature.md
+      - Quick Bug Fix: workflows/quick-bugfix.md
+      - Architecture Day: workflows/architecture-day.md
+      - Fire and Forget: workflows/fire-and-forget.md
+  - Skills:
+      - skills/index.md
+      - Productivity:
+          - skills/caveman.md
+          - skills/grill-me.md
+          - skills/write-a-skill.md
+      - Engineering:
+          - skills/grill-with-docs.md
+          - skills/to-prd.md
+          - skills/to-issues.md
+          - skills/triage.md
+          - skills/tdd.md
+          - skills/diagnose.md
+          - skills/improve-codebase-architecture.md
+          - skills/zoom-out.md
+          - skills/review-commit.md
+          - skills/review-issue.md
+          - skills/setup-matt-pocock-skills.md
+  - Extensions:
+      - extensions/index.md
+      - Ralph: extensions/ralph.md
+      - Git Workflow: extensions/git-workflow.md
+      - Security Gate: extensions/security-gate.md
+      - Protected Paths: extensions/protected-paths.md
+      - Pi Docs: extensions/pi-docs.md
+  - Ralph Loop:
+      - ralph/index.md
+      - Architecture: ralph/architecture.md
+      - Prompt: ralph/prompt.md
+      - Scripts: ralph/scripts.md
+  - Reference:
+      - reference/file-map.md
+      - reference/slash-commands.md
+      - reference/environment-variables.md
+      - reference/triage-state-machine.md
