@@ -63,19 +63,5 @@ git checkout main
 git merge agent/pool-0-xxx
 ```
 
-## Manual parallel mode
-
-You can also run agents manually with different models:
-
-```bash
-# Terminal 1
-GITHUB_TOKEN=$(gh auth token) RALPH_MODEL=zai/glm-5.1 \
-  ralph/afk.sh 20
-
-# Terminal 2
-GITHUB_TOKEN=$(gh auth token) RALPH_MODEL=anthropic/claude-sonnet-4 \
-  ralph/afk-local.sh 20
-```
-
-!!! warning "Parallel agents must use worktrees"
-    Never run two agents in the same directory. Always use `/ralph start N` which sets up worktrees automatically, or use the Docker mode with different mounts.
+!!! warning "Never run multiple agents in the same directory"
+    Always use `/ralph start N` which sets up worktrees automatically. Each agent gets its own checkout — no file conflicts.

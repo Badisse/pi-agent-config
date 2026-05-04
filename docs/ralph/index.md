@@ -57,7 +57,7 @@ Each Ralph iteration follows this exact sequence:
 - **Feedback loops required** — tests + typecheck + build must pass before commit
 - **Self-review** — agent reviews its own diff
 - **Stale recovery** — if an agent crashes, the next one un-claims the issue
-- **Horizontal slice rejection** — agent refuses to implement horizontal issues
+- **Horizontal slice rejection** — agent refuses to implement horizontal issues and flags them back to `needs-triage`
 
 ## See also
 

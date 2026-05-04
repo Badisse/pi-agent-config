@@ -29,8 +29,8 @@ Pick the proposals you like and create issues:
 
 ## Step 3: Ralph implements
 
-```bash
-/ralph start 10
+```
+/ralph start
 ```
 
 The agent implements the refactors as vertical slices — each issue is one complete module deepening.

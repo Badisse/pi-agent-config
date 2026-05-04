@@ -71,17 +71,17 @@ needs-triage → ready-for-agent (AFK, fully specified)
 
 For each `ready-for-agent` issue, the agent writes an **agent brief** — a behavioral contract for the autonomous loop.
 
-## Step 5: Ralph implements (autonomous)
+## Step 5: Ralph implements (autonomous, 30–60 min)
 
 ```bash
 # From inside Pi:
-/ralph start 20
+/ralph start
 
 # Or from a separate terminal:
-ralph/afk.sh 20
+ralph/afk.sh
 ```
 
-Each Ralph iteration:
+The first run auto-builds the Docker image (~3 min). After that, each iteration:
 
 1. Injects context (last 5 commits + `ready-for-agent` issues)
 2. Picks the highest-priority unblocked issue

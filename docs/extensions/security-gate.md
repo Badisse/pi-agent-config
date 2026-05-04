@@ -33,10 +33,6 @@ Protects against destructive, suspicious, and sensitive bash commands, and preve
 
 Everything else — `ls`, `cat`, `grep`, `git status`, etc.
 
-## Auto-allowed
-
-Everything else — `ls`, `cat`, `grep`, `git status`, etc.
-
 ## Environment variable protection
 
 Three tiers of protection:

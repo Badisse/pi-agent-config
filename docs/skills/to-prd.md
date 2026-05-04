@@ -18,7 +18,7 @@ The agent:
 
 1. **Synthesizes** the conversation — no additional interview
 2. **Explores** the repo to understand current state
-3. **Sketches modules** — identifies what to build/modify, looks for deep module opportunities
+3. **Sketches modules** — identifies what to build/modify using the domain language from `CONTEXT.md`, looks for deep module opportunities
 4. **Confirms** modules with you
 5. **Writes the PRD** using the template below
 6. **Publishes** to GitHub Issues with label `needs-triage`

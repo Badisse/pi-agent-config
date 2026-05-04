@@ -33,6 +33,6 @@ pi
 ## Philosophy
 
 - **Design interactively, implement autonomously** — I design with Pi in conversation, then let Ralph implement without supervision.
-- **Vertical slices only** — every issue is a thin cut through all layers, never a horizontal "do all the backend" task.
+- **Vertical slices only** — every issue is a thin cut through all layers, never a horizontal "add all database models" task.
 - **Security first** — hard-blocked destructive commands, protected paths, no access to secrets.
 - **Domain language matters** — `CONTEXT.md` and ADRs create a shared vocabulary between me and the agent.
