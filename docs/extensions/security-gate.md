@@ -39,42 +39,26 @@ Everything else — `ls`, `cat`, `grep`, `git status`, etc.
 
 ## Environment variable protection
 
-The gate blocks both **bulk dumps** and **targeted access** to sensitive env vars.
+Three tiers of protection:
 
-### Blocked dump commands
+| Tier | Behavior | Examples |
+|---|---|---|
+| **Sensitive vars** | Hard-blocked (no prompt) | `$GITHUB_TOKEN`, `$AWS_SECRET_KEY`, `$OPENAI_API_KEY` |
+| **Non-sensitive vars** | Prompted (you decide) | `$HOME`, `$PATH`, `$NODE_ENV` |
+| **Env dump commands** | Hard-blocked (no prompt) | `env`, `printenv`, `export -p`, `process.env` |
 
-| Command | Blocked |
-|---|---|
-| `env` | ✅ Dumps all vars |
-| `printenv` | ✅ Dumps all vars |
-| `export -p` / `declare -p` | ✅ Dumps all vars |
-| `node -e "...process.env..."` | ✅ Node.js env dump |
-| `python -c "...os.environ..."` | ✅ Python env dump |
-| `/proc/self/environ` | ✅ Procfs env file |
+When the model tries to read a non-sensitive env var, you get a prompt:
 
-### Sensitive var patterns
+```
+🔑 Access to env var: NODE_ENV
 
-Access via `$VAR`, `${VAR}`, or `printenv VAR` is blocked for any variable matching:
+  echo $NODE_ENV
 
-- `*_TOKEN`, `*_KEY`, `*_SECRET`, `*_PASSWORD`, `*_PASS`
-- `*_CREDENTIALS`, `*_PRIVATE_KEY`
-- `AWS_*`, `OPENAI*`, `ANTHROPIC*`, `GOOGLE_*`
-- `STRIPE_*`, `TWILIO_*`, `SLACK_*`, `DISCORD_*`
-- `DATABASE_URL`, `SECRET_*`, `MYSQL_*`, `PGPASSWORD`, `MONGO*`, `REDIS*`
-- ...and more (see source for full list)
+Allow the model to read this env var?
+  [Yes, allow]  [No, block it]
+```
 
-### Explicitly allowed
-
-These vars match sensitive patterns but are harmless config flags:
-
-| Variable | Why allowed |
-|---|---|
-| `RALPH_MODEL` | Ralph model name (not a secret) |
-| `RALPH_TIMEOUT` | Ralph timeout in seconds (not a secret) |
-| `PI_OFFLINE` | Pi offline mode flag (not a secret) |
-
-!!! note "GITHUB_TOKEN is NOT on the allowlist"
-    Ralph uses `gh` CLI commands (e.g. `gh issue list`) which read the token from the process environment internally. The model never needs to reference `$GITHUB_TOKEN` in any command. Blocking read access doesn't break Ralph — it just prevents the model from ever seeing the token value.
+This means the model can **never** see any env var value without your explicit approval.
 
 ## How it works
 

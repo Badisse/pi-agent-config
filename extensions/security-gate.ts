@@ -115,19 +115,21 @@ function isSensitiveVar(name: string): boolean {
 	return SENSITIVE_VAR_PATTERNS.some((p) => p.test(name));
 }
 
-function checkEnvAccess(command: string): { blocked: boolean; reason?: string } {
-	// 1. Block env dump commands
+function checkEnvAccess(command: string): { blocked: boolean; prompt?: string; reason?: string } {
+	// 1. Block env dump commands (always hard-blocked)
 	for (const { pattern, reason } of ENV_DUMP_BLOCKED) {
 		if (pattern.test(command)) {
 			return { blocked: true, reason };
 		}
 	}
 
-	// 2. Check $VAR and ${VAR} references for sensitive names
+	// 2. Check $VAR and ${VAR} references
 	for (const match of command.matchAll(/\$\{?([A-Z_][A-Z0-9_]*)\}?/g)) {
 		if (isSensitiveVar(match[1])) {
 			return { blocked: true, reason: `Access to sensitive env var blocked: ${match[1]}` };
 		}
+		// Non-sensitive var read — prompt user
+		return { blocked: false, prompt: `🔑 Access to env var: ${match[1]}` };
 	}
 
 	// 3. Check printenv with specific var name
@@ -135,6 +137,8 @@ function checkEnvAccess(command: string): { blocked: boolean; reason?: string } 
 		if (isSensitiveVar(match[1])) {
 			return { blocked: true, reason: `Access to sensitive env var blocked: ${match[1]}` };
 		}
+		// Non-sensitive var read — prompt user
+		return { blocked: false, prompt: `🔑 Access to env var: ${match[1]}` };
 	}
 
 	return { blocked: false };
@@ -171,6 +175,24 @@ export default function (pi: ExtensionAPI) {
 		if (envCheck.blocked) {
 			ctx.ui.notify(`🔒 ${envCheck.reason}: ${truncate(command, 80)}`, "error");
 			return { block: true, reason: `${envCheck.reason}: ${command}` };
+		}
+		if (envCheck.prompt) {
+			if (!ctx.hasUI) {
+				return { block: true, reason: `${envCheck.prompt} (no UI for confirmation)` };
+			}
+			const choice = await ctx.ui.select(
+				`${envCheck.prompt}:
+
+  ${truncate(command, 200)}
+
+Allow the model to read this env var?`,
+				["Yes, allow", "No, block it"],
+			);
+			if (choice !== "Yes, allow") {
+				ctx.ui.notify(`🔒 Blocked env var access`, "warning");
+				return { block: true, reason: `Blocked by user: ${command}` };
+			}
+			return undefined;
 		}
 
 		// 3. Git push to main — strong warning
