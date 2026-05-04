@@ -12,6 +12,7 @@ import {
 	getBranchCommits,
 	getDiffStat,
 	getChangedFiles,
+	getDiff,
 } from "./git-utils.js";
 import { generateHtml, writeTempHtml, type PrSummaryData } from "./pr-summary-html.js";
 
@@ -94,9 +95,10 @@ async function handlePrSummary(pi: ExtensionAPI, ctx: ExtensionContext): Promise
 
 	const diffStat = await getDiffStat(pi, defaultBranch);
 	const changedFiles = await getChangedFiles(pi, defaultBranch);
+	const diff = await getDiff(pi, defaultBranch);
 
 	// Generate and write HTML
-	const data: PrSummaryData = { branch, baseBranch: defaultBranch, commits, changedFiles, diffStat };
+	const data: PrSummaryData = { branch, baseBranch: defaultBranch, commits, changedFiles, diffStat, diff };
 	const html = generateHtml(data);
 	const filePath = writeTempHtml(html);
 

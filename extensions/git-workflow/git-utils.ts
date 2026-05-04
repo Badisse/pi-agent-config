@@ -130,3 +130,14 @@ export async function getChangedFiles(pi: ExtensionAPI, baseBranch: string): Pro
 	if (code !== 0) return [];
 	return stdout.trim().split("\n").filter(Boolean);
 }
+
+/**
+ * Get the full diff content between base branch and HEAD.
+ */
+export async function getDiff(pi: ExtensionAPI, baseBranch: string): Promise<string> {
+	const { stdout, code } = await pi.exec("git", [
+		"diff",
+		`${baseBranch}...HEAD`,
+	]);
+	return code === 0 ? stdout.trim() : "";
+}
