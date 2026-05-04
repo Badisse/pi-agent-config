@@ -17,13 +17,17 @@ This creates:
 - `.gitignore` entries for `ralph/`, `.ralph-logs/`, `.ralph-worktrees/`
 - GitHub labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `in-progress`, `wontfix`
 
-## Step 2: Run the setup skill
+## Step 2: Configure the skills
+
+`/ralph init` creates the scaffolding. Now you need to configure it — this step asks you questions (issue tracker type, labels, domain layout).
 
 ```
 > /skill:setup-matt-pocock-skills
 ```
 
-This configures:
+This is a **separate step** on purpose: init is deterministic (files + labels), setup is interactive (your preferences).
+
+It configures:
 
 - Issue tracker type (GitHub / GitLab / local)
 - Triage labels
