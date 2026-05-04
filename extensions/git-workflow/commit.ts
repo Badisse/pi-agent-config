@@ -10,18 +10,20 @@ import {
 	isDirty,
 	countChangedFiles,
 	getCurrentBranch,
-	isProtectedBranch,
 	stageAndCommit,
 } from "./git-utils.js";
+import { isProtectedBranch } from "./branch.js";
 
 /**
  * Register the /commit command.
+ * Accepts a getter function so the handler always reads the latest config
+ * (config is loaded asynchronously on session_start, after commands are registered).
  */
-export function registerCommitCommand(pi: ExtensionAPI, config: GitWorkflowConfig): void {
+export function registerCommitCommand(pi: ExtensionAPI, getConfig: () => GitWorkflowConfig): void {
 	pi.registerCommand("commit", {
 		description: "Guided conventional commit (type, scope, message)",
 		handler: async (_args, ctx) => {
-			await handleCommit(pi, ctx, config);
+			await handleCommit(pi, ctx, getConfig());
 		},
 	});
 }

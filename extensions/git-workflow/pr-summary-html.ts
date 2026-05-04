@@ -16,6 +16,7 @@ export interface PrSummaryData {
 	commits: string[];
 	changedFiles: string[];
 	diffStat: string;
+	diff: string;
 }
 
 /** Commit type → color mapping for visual scanning. */
@@ -67,6 +68,28 @@ function renderCommit(line: string): string {
 	}
 
 	return escaped;
+}
+
+/** Render diff with syntax highlighting for additions/removals. */
+function renderDiff(diff: string): string {
+	return escapeHtml(diff)
+		.split("\n")
+		.map((line) => {
+			if (line.startsWith("+++") || line.startsWith("---")) {
+				return `<span class="diff-filename">${line}</span>`;
+			}
+			if (line.startsWith("@@")) {
+				return `<span class="diff-hunk">${line}</span>`;
+			}
+			if (line.startsWith("+")) {
+				return `<span class="diff-add">${line}</span>`;
+			}
+			if (line.startsWith("-")) {
+				return `<span class="diff-del">${line}</span>`;
+			}
+			return line;
+		})
+		.join("\n");
 }
 
 /** Generate the full HTML page. */
@@ -261,6 +284,40 @@ export function generateHtml(data: PrSummaryData): string {
       margin: 0;
     }
 
+    /* ── Diff content ───────────────────────────────────── */
+    .diff-content {
+      font-family: "SF Mono", "Fira Code", "Cascadia Code", Menlo, Consolas, monospace;
+      font-size: 0.82rem;
+      white-space: pre;
+      overflow-x: auto;
+      color: var(--text-dim);
+      margin: 0;
+      line-height: 1.5;
+    }
+
+    .diff-add {
+      color: #3fb950;
+      background: rgba(63, 185, 80, 0.1);
+      display: block;
+    }
+
+    .diff-del {
+      color: #f85149;
+      background: rgba(248, 81, 73, 0.1);
+      display: block;
+    }
+
+    .diff-hunk {
+      color: #58a6ff;
+      display: block;
+    }
+
+    .diff-filename {
+      color: #c9d1d9;
+      font-weight: 600;
+      display: block;
+    }
+
     /* ── Footer ─────────────────────────────────────────── */
     footer {
       text-align: center;
@@ -321,6 +378,13 @@ export function generateHtml(data: PrSummaryData): string {
       <div class="section-title">Diff Stat</div>
       <div class="section-body">
         ${diffStatHtml}
+      </div>
+    </div>` : ""}
+
+    ${data.diff ? `<div class="section">
+      <div class="section-title">Changes</div>
+      <div class="section-body">
+        <pre class="diff-content">${renderDiff(data.diff)}</pre>
       </div>
     </div>` : ""}
 

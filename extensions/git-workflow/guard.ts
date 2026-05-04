@@ -9,8 +9,8 @@ import {
 	isDirty,
 	countChangedFiles,
 	getCurrentBranch,
-	isProtectedBranch,
 } from "./git-utils.js";
+import { isProtectedBranch } from "./branch.js";
 
 /**
  * Check for uncommitted changes and prompt the user.
