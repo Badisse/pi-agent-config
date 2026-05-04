@@ -72,15 +72,17 @@ The extension hooks into `tool_call` events for the `bash` tool. For each comman
 
 ### AFK mode (Ralph)
 
-When Pi runs without a UI (Ralph AFK mode: `--mode text --no-session`), prompted commands are **auto-allowed** since there's no way to show the user a dialog. Hard-blocks still apply:
+When Pi runs without a UI, prompted commands are only **auto-allowed inside Docker**. Local AFK (`afk-local.sh`) still blocks prompted commands — the model runs on your bare machine, so you need to approve.
 
-| Category | Interactive | AFK (Ralph) |
-|---|---|---|
-| Hard-blocked (`rm -rf`, `sudo`) | 🚫 Blocked | 🚫 Blocked |
-| Sensitive env vars | 🚫 Blocked | 🚫 Blocked |
-| Env dump commands | 🚫 Blocked | 🚫 Blocked |
-| Git push to main | 🚫 Blocked | 🚫 Blocked |
-| Non-sensitive env vars | 🔑 Prompt | ✅ Auto-allow |
-| Package installs | 🔑 Prompt | ✅ Auto-allow |
-| Network (data upload) | 🔑 Prompt | ✅ Auto-allow |
-| Other commands | ✅ Auto-allow | ✅ Auto-allow |
+| Category | Interactive | AFK Docker | AFK Local |
+|---|---|---|---|
+| Hard-blocked (`rm -rf`, `sudo`) | 🚫 Blocked | 🚫 Blocked | 🚫 Blocked |
+| Sensitive env vars | 🚫 Blocked | 🚫 Blocked | 🚫 Blocked |
+| Env dump commands | 🚫 Blocked | 🚫 Blocked | 🚫 Blocked |
+| Git push to main | 🚨 Override | 🚫 Blocked | 🚫 Blocked |
+| Non-sensitive env vars | 🔑 Prompt | ✅ Auto-allow | 🚫 Blocked |
+| Package installs | 🔑 Prompt | ✅ Auto-allow | 🚫 Blocked |
+| Network (data upload) | 🔑 Prompt | ✅ Auto-allow | 🚫 Blocked |
+| Other commands | ✅ Auto-allow | ✅ Auto-allow | ✅ Auto-allow |
+
+Docker detection uses `/.dockerenv` — a file Docker creates inside every container.

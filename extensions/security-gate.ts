@@ -144,8 +144,31 @@ function checkEnvAccess(command: string): { blocked: boolean; prompt?: string; r
 	return { blocked: false };
 }
 
-// ── Git push to main (strong warning, can override) ───────────
+// ── Git push to main (always blocked) ────────────────────────
 const GIT_PUSH_MAIN = /\bgit\s+push\b.*\b(main|master)\b/i;
+
+// ── Docker detection ──────────────────────────────────────────
+let _isDocker: boolean | undefined;
+function isDocker(): boolean {
+	if (_isDocker !== undefined) return _isDocker;
+	try {
+		// Docker creates /.dockerenv in containers
+		const fs = require("fs");
+		_isDocker = fs.existsSync("/.dockerenv");
+	} catch {
+		_isDocker = false;
+	}
+	return _isDocker;
+}
+
+// ── AFK trust check ───────────────────────────────────────────
+// Auto-allow prompted commands ONLY when:
+//   1. No UI (AFK mode) AND
+//   2. Running inside Docker (sandboxed)
+// Local AFK (afk-local.sh) still blocks prompted commands.
+function isTrustedAFK(ctx: any): boolean {
+	return !ctx.hasUI && isDocker();
+}
 
 function truncate(text: string, maxLen: number): string {
 	return text.length > maxLen ? text.slice(0, maxLen) + "…" : text;
@@ -177,8 +200,8 @@ export default function (pi: ExtensionAPI) {
 			return { block: true, reason: `${envCheck.reason}: ${command}` };
 		}
 		if (envCheck.prompt) {
-			// AFK mode (no UI) — auto-allow non-sensitive env vars
-			if (!ctx.hasUI) return undefined;
+			// AFK in Docker — auto-allow non-sensitive env vars
+			if (isTrustedAFK(ctx)) return undefined;
 			const choice = await ctx.ui.select(
 				`${envCheck.prompt}:
 
@@ -194,17 +217,31 @@ Allow the model to read this env var?`,
 			return undefined;
 		}
 
-		// 3. Git push to main — always block (even in AFK)
+		// 3. Git push to main — strong warning (blocked in AFK)
 		if (GIT_PUSH_MAIN.test(command)) {
-			ctx.ui.notify("🚫 Push to main/master blocked", "error");
-			return { block: true, reason: `Push to main/master blocked: ${command}` };
+			if (isTrustedAFK(ctx)) {
+				ctx.ui.notify("🚫 Push to main/master blocked in AFK mode", "error");
+				return { block: true, reason: `Push to main/master blocked in AFK: ${command}` };
+			}
+			if (!ctx.hasUI) {
+				return { block: true, reason: "Push to main/master blocked (no UI)" };
+			}
+			const choice = await ctx.ui.select(
+				`🚨 PUSHING TO MAIN/MASTER BRANCH!\n\n  ${truncate(command, 200)}\n\nThis is usually not recommended.`,
+				["No, block it", "Yes, I know what I'm doing"],
+			);
+			if (choice !== "Yes, I know what I'm doing") {
+				ctx.ui.notify("🚫 Push to main blocked", "warning");
+				return { block: true, reason: "Push to main blocked by user" };
+			}
+			return undefined;
 		}
 
 		// 4. Prompted categories — user decides (AFK auto-allows)
 		for (const { pattern, label } of PROMPTED) {
 			if (pattern.test(command)) {
-				// AFK mode (no UI) — auto-allow prompted commands
-				if (!ctx.hasUI) return undefined;
+				// AFK in Docker — auto-allow prompted commands
+				if (isTrustedAFK(ctx)) return undefined;
 				const choice = await ctx.ui.select(
 					`${label}:\n\n  ${truncate(command, 200)}\n\nAllow execution?`,
 					["Yes, run it", "No, block it"],
