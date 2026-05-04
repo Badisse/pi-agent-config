@@ -65,15 +65,16 @@ Access via `$VAR`, `${VAR}`, or `printenv VAR` is blocked for any variable match
 
 ### Explicitly allowed
 
-These vars match sensitive patterns but are needed by Ralph, so they're allowed:
+These vars match sensitive patterns but are harmless config flags:
 
 | Variable | Why allowed |
 |---|---|
-| `GITHUB_TOKEN` | Ralph needs it for issue management |
-| `GH_TOKEN` | Alias for GITHUB_TOKEN |
-| `RALPH_MODEL` | Ralph model config |
-| `RALPH_TIMEOUT` | Ralph timeout config |
-| `PI_OFFLINE` | Pi offline mode flag |
+| `RALPH_MODEL` | Ralph model name (not a secret) |
+| `RALPH_TIMEOUT` | Ralph timeout in seconds (not a secret) |
+| `PI_OFFLINE` | Pi offline mode flag (not a secret) |
+
+!!! note "GITHUB_TOKEN is NOT on the allowlist"
+    Ralph uses `gh` CLI commands (e.g. `gh issue list`) which read the token from the process environment internally. The model never needs to reference `$GITHUB_TOKEN` in any command. Blocking read access doesn't break Ralph — it just prevents the model from ever seeing the token value.
 
 ## How it works
 

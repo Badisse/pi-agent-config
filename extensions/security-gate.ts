@@ -105,8 +105,6 @@ const SENSITIVE_VAR_PATTERNS: RegExp[] = [
 
 // Explicitly allowed even if they match a sensitive pattern (needed by Ralph)
 const ALLOWED_ENV_VARS = new Set([
-	"GITHUB_TOKEN",
-	"GH_TOKEN",
 	"RALPH_MODEL",
 	"RALPH_TIMEOUT",
 	"PI_OFFLINE",
