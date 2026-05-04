@@ -151,6 +151,6 @@ export default function gitWorkflowExtension(pi: ExtensionAPI): void {
 
 	// ── Commands ────────────────────────────────────────────────
 
-	registerCommitCommand(pi, config);
+	registerCommitCommand(pi, () => config);
 	registerCommands(pi);
 }
