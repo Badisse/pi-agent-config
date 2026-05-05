@@ -1,4 +1,10 @@
 {
   "enableInstallTelemetry": false,
-  "lastChangelogVersion": "0.72.1"
+  "lastChangelogVersion": "0.72.1",
+  "packages": [
+    "npm:context-mode",
+    "npm:pi-subagents",
+    "npm:pi-mcp-adapter",
+    "npm:pi-web-access"
+  ]
 }
