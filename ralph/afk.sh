@@ -14,6 +14,7 @@ set -eo pipefail
 
 ITERATIONS=${1:-0}
 MODEL=${2:-zai/glm-5.1}
+REVIEW=${3:-true}  # third arg: "noreview" to skip review phase
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 WORKTREE_DIR="${WORKTREE_DIR:-$PROJECT_DIR}"
@@ -155,6 +156,63 @@ $prompt"
 
   echo "$result"
   echo ""
+
+  # ── Review phase (fresh agent, no implementer context) ─────────
+
+  if [ "$REVIEW" != "noreview" ]; then
+    # Check if implementer produced commits on this branch
+    current_branch=$(cd "$WORKTREE_DIR" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+    base_branch=$(cd "$PROJECT_DIR" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+    new_commits=0
+    if [ -n "$current_branch" ] && [ "$current_branch" != "$base_branch" ]; then
+      new_commits=$(cd "$WORKTREE_DIR" && git log "$base_branch"..HEAD --oneline 2>/dev/null | wc -l | tr -d ' ')
+    fi
+
+    if [ "$new_commits" -gt 0 ]; then
+      issue_num=$(echo "$current_branch" | grep -oE 'agent/([0-9]+)' | grep -oE '[0-9]+' || echo "")
+      review_prompt=$(cat "$SCRIPT_DIR/review-prompt.md")
+      review_prompt=${review_prompt//\{\{BASE_BRANCH\}\}/$base_branch}
+      review_prompt=${review_prompt//\{\{ISSUE_NUMBER\}\}/$issue_num}
+
+      echo "  📋 Running review phase (fresh agent)..."
+      echo ""
+
+      set +e
+      review_result=$(timeout "$TIMEOUT" docker run --rm \
+        -v "$PROJECT_DIR:$PROJECT_DIR" \
+        -v "$HOME/.pi/agent:/root/.pi/agent" \
+        -v "$HOME/.config/gh:/root/.config/gh:ro" \
+        -v "$HOME/.gitconfig:/root/.gitconfig:ro" \
+        -e "GITHUB_TOKEN=$GH_TOKEN_VAL" \
+        -e "PI_OFFLINE=1" \
+        -w "$WORKTREE_DIR" \
+        pi-ralph \
+        --mode text \
+        --no-session \
+        --model "$MODEL" \
+        -p "$review_prompt" \
+        2>&1)
+      review_exit=$?
+      set -e
+
+      if [ $review_exit -ne 0 ] && [ -z "$review_result" ]; then
+        review_result="⏰ Review timed out after ${TIMEOUT}s."
+      fi
+
+      echo "$review_result"
+      echo ""
+
+      if echo "$review_result" | grep -q "REVIEW PASSED"; then
+        echo "  ✅ Review passed."
+      else
+        echo "  ⚠️  Review made fixes."
+      fi
+      echo ""
+    else
+      echo "  ⏭️  No commits to review."
+      echo ""
+    fi
+  fi
 
   # ── Check completion ──────────────────────────────────────────
 

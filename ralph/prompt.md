@@ -48,17 +48,6 @@ Among eligible issues, prioritize:
 
 If ALL `ready-for-agent` issues are `in-progress` or blocked, output <promise>NO MORE TASKS</promise>.
 
-## Stale in-progress recovery
-
-If there are no `ready-for-agent` issues but there ARE `in-progress` issues, a previous agent may have crashed. Un-claim the first one:
-
-```bash
-gh issue edit <number> --remove-label "in-progress" --add-label "ready-for-agent"
-gh issue comment <number> --body "⚠️ Unclaimed: previous agent timed out or crashed."
-```
-
-Then proceed to work on it.
-
 # CLAIM THE ISSUE
 
 Before starting work, claim the issue:
@@ -92,7 +81,15 @@ Explore the repo. Check CONTEXT.md for domain language and docs/adr/ for archite
 
 # IMPLEMENTATION
 
-Use /skill:tdd to complete the task.
+Before writing any code, plan your approach:
+
+1. Read the issue acceptance criteria carefully
+2. Explore the relevant code paths and existing tests
+3. List the behaviors you'll test (not implementation steps)
+4. Identify the public interface changes needed
+5. Only then proceed with /skill:tdd (red-green-refactor)
+
+This planning step is mandatory. Do not skip it. Jumping straight into code without understanding the full scope leads to incomplete solutions and wasted iterations.
 
 # FEEDBACK LOOPS
 

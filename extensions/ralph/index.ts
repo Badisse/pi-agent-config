@@ -442,6 +442,173 @@ async function handleLog(ctx: any, projectDir: string, sessionArg: string) {
 	notify(ctx, `Last 50 lines:\n${content.trim().split("\n").slice(-50).join("\n")}`, "info");
 }
 
+// ── Merge ────────────────────────────────────────────────────────
+
+async function handleMerge(ctx: any, projectDir: string) {
+	const tokenVal = await getGitHubToken();
+	if (!tokenVal) {
+		notify(ctx, "⚠️ No GitHub token. Run: export GITHUB_TOKEN=$(gh auth token)", "warning");
+		return;
+	}
+
+	// Find agent/* branches, excluding merge branches
+	const branchesResult = await run("git", ["branch", "--list", "agent/*", "--format=%(refname:short)"], { cwd: projectDir, timeout: 5000 });
+	const branches = branchesResult.stdout.trim().split("\n").map((b) => b.trim()).filter((b) => b && !b.includes("agent/merge-"));
+
+	if (branches.length === 0) {
+		notify(ctx, "No agent/* branches found. Nothing to merge.", "info");
+		return;
+	}
+
+	const baseBranchResult = await run("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: projectDir, timeout: 3000 });
+	const baseBranch = baseBranchResult.stdout.trim();
+	const batchDate = new Date().toISOString().slice(0, 10);
+	const mergeBranch = `agent/merge-batch-${batchDate}`;
+	const model = resolveModel();
+	const timeout = process.env.RALPH_TIMEOUT || "1800";
+
+	// Create merge branch from base
+	await run("git", ["fetch", "origin", baseBranch], { cwd: projectDir, timeout: 10000 });
+	await run("git", ["branch", "-D", mergeBranch], { cwd: projectDir, timeout: 3000 });
+	const createResult = await run("git", ["checkout", "-b", mergeBranch, `origin/${baseBranch}`], { cwd: projectDir, timeout: 10000 });
+	if (createResult.status !== 0) {
+		await run("git", ["checkout", "-b", mergeBranch, baseBranch], { cwd: projectDir, timeout: 10000 });
+	}
+
+	notify(ctx,
+		`🔀 Merging ${branches.length} branch(es) into ${mergeBranch} (from ${baseBranch})\n` +
+		`   Model: ${model}\n` +
+		`   Branches:\n${branches.map((b) => `     - ${b}`).join("\n")}`,
+		"info",
+	);
+
+	// Build branch list and prompt
+	const branchList = branches.map((b) => `- ${b}`).join("\\n");
+	const mergePromptPath = join(RALPH_DIR, "merge-prompt.md");
+	let mergePrompt = readFileSync(mergePromptPath, "utf-8");
+	mergePrompt = mergePrompt.replace(/\{\{BRANCHES\}\}/g, branchList);
+	mergePrompt = mergePrompt.replace(/\{\{BASE_BRANCH\}\}/g, baseBranch);
+	mergePrompt = mergePrompt.replace(/\{\{MERGE_BRANCH\}\}/g, mergeBranch);
+
+	// Ensure Docker image exists
+	if (!existsSync(join(RALPH_DIR, "Dockerfile"))) {
+		notify(ctx, "No Dockerfile found in ralph/", "error");
+		return;
+	}
+	const imgCheck = await run("docker", ["image", "inspect", "pi-ralph"], { timeout: 3000 });
+	if (imgCheck.status !== 0) {
+		notify(ctx, "⚠️ Building pi-ralph Docker image...", "info");
+		await run("docker", ["build", "-t", "pi-ralph", RALPH_DIR], { timeout: 120000 });
+	}
+
+	// Log dir
+	const logDir = getLogDir(projectDir);
+	mkdirSync(logDir, { recursive: true });
+	const logFile = join(logDir, `merge-${batchDate}.log`);
+
+	// Run merge agent in tmux
+	const sessionName = `${TMUX_PREFIX}-merge-${Date.now()}`;
+	const ts = new Date().toISOString().replace(/[:.]/g, "-");
+
+	const r = await run("tmux", [
+		"new-session", "-d", "-s", sessionName, "-c", projectDir,
+		`bash -c 'GITHUB_TOKEN=${tokenVal} timeout ${timeout} docker run --rm \
+			-v "${projectDir}:${projectDir}" \
+			-v "$HOME/.pi/agent:/root/.pi/agent" \
+			-v "$HOME/.config/gh:/root/.config/gh:ro" \
+			-v "$HOME/.gitconfig:/root/.gitconfig:ro" \
+			-e "GITHUB_TOKEN=${tokenVal}" \
+			-e "PI_OFFLINE=1" \
+			-w "${projectDir}" \
+			pi-ralph \
+			--mode text --no-session --model ${model} \
+			-p ${shellQuote(mergePrompt)} \
+			2>&1 | tee ${logFile}; \
+		git checkout ${baseBranch} 2>/dev/null; \
+		echo "\\nMerge session ended at $(date)"'`,
+	], { cwd: projectDir, timeout: 5000 });
+
+	if (r.status !== 0) {
+		// Restore base branch on failure
+		await run("git", ["checkout", baseBranch], { cwd: projectDir, timeout: 3000 });
+		notify(ctx, `❌ Failed to start merge session: ${r.stderr}`, "error");
+		return;
+	}
+
+	notify(ctx,
+		`🔀 Merge agent started\n` +
+		`   Session: ${sessionName}\n` +
+		`   Merge branch: ${mergeBranch} (from ${baseBranch})\n` +
+		`   Merging ${branches.length} branch(es)\n\n` +
+		`   /ralph log ${sessionName} | /ralph status`,
+		"info",
+	);
+}
+
+function shellQuote(s: string): string {
+	return "'" + s.replace(/'/g, "'\\''") + "'";
+}
+
+// ── Recover ────────────────────────────────────────────────────────
+
+async function handleRecover(ctx: any, projectDir: string) {
+	const sessions = await getActiveSessions();
+
+	if (sessions.length > 0) {
+		notify(ctx,
+			`⚠️ ${sessions.length} active session(s) still running:\n` +
+			sessions.map((s) => `  - ${s}`).join("\n") +
+			"\n\nCannot recover while agents are active. Run /ralph stop first.",
+			"warning",
+		);
+		return;
+	}
+
+	// Find in-progress issues
+	const repoResult = await run("git", ["remote", "get-url", "origin"], { cwd: projectDir, timeout: 3000 });
+	if (repoResult.status !== 0) {
+		notify(ctx, "No git remote configured.", "error");
+		return;
+	}
+
+	const inProgResult = await run("gh", ["issue", "list", "--label", "in-progress", "--state", "open", "--json", "number,title"], { cwd: projectDir, timeout: 10000 });
+	if (inProgResult.status !== 0 || !inProgResult.stdout.trim() || inProgResult.stdout.trim() === "[]") {
+		notify(ctx, "No stale in-progress issues found. Nothing to recover.", "info");
+		return;
+	}
+
+	let staleIssues: { number: number; title: string }[];
+	try {
+		staleIssues = JSON.parse(inProgResult.stdout);
+	} catch {
+		notify(ctx, "Could not parse issue list.", "error");
+		return;
+	}
+
+	// No active sessions + in-progress issues = all stale
+	const recovered: string[] = [];
+	const failed: string[] = [];
+
+	for (const issue of staleIssues) {
+		const unclaim = await run("gh", ["issue", "edit", String(issue.number), "--remove-label", "in-progress", "--add-label", "ready-for-agent"], { cwd: projectDir, timeout: 5000 });
+		if (unclaim.status === 0) {
+			await run("gh", ["issue", "comment", String(issue.number), "--body", "⚠️ Unclaimed: previous agent timed out or crashed. Recovered by /ralph recover."], { cwd: projectDir, timeout: 5000 });
+			recovered.push(`#${issue.number}: ${issue.title}`);
+		} else {
+			failed.push(`#${issue.number}: ${issue.title}`);
+		}
+	}
+
+	let msg = "";
+	if (recovered.length > 0) {
+		msg += `✅ Recovered ${recovered.length} issue(s):\n${recovered.map((i) => `  - ${i}`).join("\n")}`;
+	}
+	if (failed.length > 0) {
+		msg += `${recovered.length > 0 ? "\n" : ""}❌ Failed to recover ${failed.length} issue(s):\n${failed.map((i) => `  - ${i}`).join("\n")}`;
+	}
+	notify(ctx, msg, failed.length > 0 ? "warning" : "info");
+}
+
 // ── Stop ─────────────────────────────────────────────────────────
 
 async function handleStop(ctx: any, sessionArg: string, projectDir: string) {
@@ -527,6 +694,8 @@ export default function (pi: ExtensionAPI) {
 				case "init": await handleInit(ctx, projectDir); break;
 				case "start": await handleStart(ctx, projectDir, rest, false); break;
 				case "local": await handleStart(ctx, projectDir, rest, true); break;
+				case "merge": await handleMerge(ctx, projectDir); break;
+				case "recover": await handleRecover(ctx, projectDir); break;
 				case "once": await handleOnce(ctx, projectDir); break;
 				case "status": await handleStatus(ctx, projectDir); break;
 				case "log": await handleLog(ctx, projectDir, rest); break;
@@ -537,6 +706,8 @@ export default function (pi: ExtensionAPI) {
 						"  init              Initialize ralph + labels + docs\n" +
 						"  start [N]         Start N parallel Docker agents (default 1)\n" +
 						"  local [N]         Same without Docker\n" +
+						"  merge             Merge all agent/* branches into agent/merge-batch-<date>\n" +
+						"  recover           Un-claim stale in-progress issues (only when no agents running)\n" +
 						"  once              Show context for interactive session\n" +
 						"  status            Show sessions + issues + worktrees\n" +
 						"  log [session]     Tail session output\n" +

@@ -18,7 +18,7 @@ If horizontal → comment, remove label, skip.
 - Skip blocked issues (check if blocker is still OPEN)
 - Skip `in-progress` issues (another agent is working)
 - Prioritize: no blockers → bugfixes → infrastructure → features → polish → refactors
-- Stale recovery: if no `ready-for-agent` but `in-progress` exists, un-claim the oldest
+- Stale recovery is handled by `/ralph recover` (not by the agent)
 
 ### 4. Claim
 ```bash
@@ -53,6 +53,27 @@ Only if self-review passes, feedback loops pass, all acceptance criteria met.
 ## Exit condition
 
 If no eligible issues remain, output `<promise>NO MORE TASKS</promise>` and the loop exits.
+
+## Review prompt
+
+After the implementer commits, a fresh agent reviews the code using `review-prompt.md`:
+
+- Has NO implementer context — only sees the diff and the issue
+- Evaluates: correctness, test coverage, error handling, dead code, security, naming, complexity
+- Fixes real problems directly (commits + pushes) → outputs `<promise>REVIEW PASSED</promise>`
+- If critical and unfixable: reverts, reopens the issue, re-labels `ready-for-agent` → outputs `<promise>REVIEW FAILED</promise>`
+- Never closes or changes issue state
+
+## Merge prompt
+
+After all agents finish, a merge agent uses `merge-prompt.md`:
+
+- Creates `agent/merge-batch-<date>` from base branch
+- Merges all `agent/*` branches one at a time
+- Runs tests after each merge
+- Resolves conflicts
+- Cleans up merged branches
+- Never touches the base branch or issue state
 
 ## Full prompt
 
@@ -110,17 +131,6 @@ Below is the exact prompt sent to the agent each iteration.
     6. Refactors
 
     If ALL `ready-for-agent` issues are `in-progress` or blocked, output <promise>NO MORE TASKS</promise>.
-
-    ## Stale in-progress recovery
-
-    If there are no `ready-for-agent` issues but there ARE `in-progress` issues, a previous agent may have crashed. Un-claim the first one:
-
-    ```bash
-    gh issue edit <number> --remove-label "in-progress" --add-label "ready-for-agent"
-    gh issue comment <number> --body "⚠️ Unclaimed: previous agent timed out or crashed."
-    ```
-
-    Then proceed to work on it.
 
     # CLAIM THE ISSUE
 

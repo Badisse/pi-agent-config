@@ -12,6 +12,8 @@ Manages autonomous Ralph loops — start, monitor, and stop agents from inside P
 | `/ralph init` | Initialize ralph + labels + docs/agents/ |
 | `/ralph start [N]` | Start N parallel Docker agents (default 1) |
 | `/ralph local [N]` | Same without Docker |
+| `/ralph merge` | Merge all agent/* branches into `agent/merge-batch-<date>` |
+| `/ralph recover` | Un-claim stale in-progress issues (only when no agents running) |
 | `/ralph once` | Show ralph context for interactive session |
 | `/ralph status` | Show sessions + GitHub issues + worktrees |
 | `/ralph log [session]` | Tail a session's output |
@@ -44,7 +46,20 @@ The extension:
 4. Pipes output to `.ralph-logs/` for later review
 5. Manages worktree lifecycle for parallel agents
 
+### Review phase
+
+Each agent runs two separate Pi sessions per iteration:
+
+1. **Implementer** — picks an issue, implements, tests, pushes, closes the issue
+2. **Reviewer** — a fresh agent with no implementer context, reviews the diff. Fixes problems or reopens the issue
+
+This ensures no sunk-cost bias — the reviewer sees only the code, not the reasoning.
+
+### Merge phase
+
+After all agents finish, `/ralph merge` collects all `agent/*` branches and merges them into a dedicated `agent/merge-batch-<date>` branch. The base branch is never modified directly — you review the merge branch and accept it into main when ready.
+
 ## See also
 
 - [Ralph Loop](../ralph/index.md) — the full loop architecture
-- [Fire and Forget workflow](../workflows/fire-and-forget.md) — using parallel agents
+- [Fire and Forget workflow](../workflows/fire-and-forget.md) — using parallel agents with review + merge
