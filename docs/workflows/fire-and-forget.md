@@ -29,7 +29,15 @@ This starts 3 Docker agents, each in its own **git worktree**. No file conflicts
    - Agent claims an issue: removes `ready-for-agent`, adds `in-progress`
    - Agent finishes: removes `in-progress`, closes the issue
 3. Agents push to separate branches: `agent/pool-0-<timestamp>`, `agent/pool-1-<timestamp>`
-4. You review and merge at the end
+4. Issues are closed immediately so blockers resolve for other agents
+
+### Review phase
+
+After each implementer commits, a **fresh agent** reviews the code:
+
+- No implementer context — only sees the diff and the issue
+- Checks correctness, test coverage, error handling, dead code, security
+- Fixes problems directly or reopens the issue if critical
 
 ## Step 3: Monitor
 
@@ -46,21 +54,61 @@ This starts 3 Docker agents, each in its own **git worktree**. No file conflicts
 /ralph stop ralph-1234   # Stop specific session
 ```
 
-Stopping all sessions automatically cleans up worktrees.
+Stopping all sessions automatically cleans up worktrees. Worktrees also auto-clean when agents finish naturally.
 
-## Step 5: Review and merge
+## Step 4b: Recover stale issues
+
+If an agent crashed and left issues stuck as `in-progress`:
+
+```
+/ralph recover
+```
+
+This checks that no agents are still running, then un-claims all stale `in-progress` issues so they can be picked up again.
+
+You can then start new agents:
+
+```
+/ralph start 3
+```
+
+## Step 5: Merge branches
+
+After all agents finish, merge their branches into a dedicated merge branch:
+
+```
+/ralph merge
+```
+
+This:
+
+1. Creates `agent/merge-batch-<date>` from your current branch
+2. Merges all `agent/*` branches one at a time
+3. Runs tests after each merge
+4. Resolves conflicts if needed
+5. Pushes the merge branch to origin
+6. Cleans up merged `agent/*` branches
+
+## Step 6: Review and accept
 
 ```bash
-# List agent branches
-git branch --list 'agent/pool-*'
+# Check what was merged
+git checkout agent/merge-batch-2026-05-05
+git log --oneline main..HEAD
 
-# Review each
-git log agent/pool-0-xxx --oneline
-git diff main...agent/pool-0-xxx
-
-# Merge when satisfied
+# Happy? Accept into main
 git checkout main
-git merge agent/pool-0-xxx
+git merge agent/merge-batch-2026-05-05
+```
+
+## Full flow diagram
+
+```
+main ──────────────────────────────────────────
+  \                                               
+   ├── agent/42-fix ──┐                           
+   ├── agent/50-feat ──┼──→ agent/merge-batch-2026-05-05 ──→ you accept into main
+   └── agent/51-ref ──┘                           
 ```
 
 !!! warning "Never run multiple agents in the same directory"
