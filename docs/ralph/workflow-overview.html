@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pi Agent Workflow</title>
+    <style>
+        :root {
+            --bg: #0a0a0f;
+            --surface: #12121a;
+            --surface2: #1a1a26;
+            --border: #2a2a3a;
+            --text: #e4e4ef;
+            --text-muted: #8888a0;
+            --accent-1: #6366f1;
+            --accent-1-light: #818cf8;
+            --accent-2: #10b981;
+            --accent-2-light: #34d399;
+            --accent-3: #f59e0b;
+            --accent-3-light: #fbbf24;
+            --accent-4: #ef4444;
+            --accent-5: #8b5cf6;
+            --accent-6: #06b6d4;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+            -webkit-font-smoothing: antialiased;
+        }
+        
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+        
+        /* ── Hero ── */
+        .hero {
+            padding: 5rem 0 3rem;
+            text-align: center;
+        }
+        .hero h1 {
+            font-size: 3rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            background: linear-gradient(135deg, var(--accent-1-light), var(--accent-2-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 1rem;
+        }
+        .hero p {
+            font-size: 1.15rem;
+            color: var(--text-muted);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        /* ── Overview Pipeline ── */
+        .pipeline {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0;
+            padding: 3rem 0;
+            overflow-x: auto;
+        }
+        .pipeline-step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.6rem;
+            min-width: 120px;
+            cursor: default;
+        }
+        .pipeline-icon {
+            width: 52px;
+            height: 52px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .pipeline-step:hover .pipeline-icon {
+            transform: scale(1.1);
+        }
+        .pipeline-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-align: center;
+            letter-spacing: 0.02em;
+        }
+        .pipeline-sublabel {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-align: center;
+        }
+        .pipeline-arrow {
+            font-size: 1.2rem;
+            color: var(--border);
+            margin: 0 0.3rem;
+            padding-bottom: 1.8rem;
+        }
+        
+        /* ── Section ── */
+        .section {
+            padding: 3rem 0;
+        }
+        .section-title {
+            font-size: 1.6rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.02em;
+        }
+        .section-subtitle {
+            color: var(--text-muted);
+            margin-bottom: 2rem;
+            font-size: 0.95rem;
+        }
+        
+        /* ── Phase Card ── */
+        .phase {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 1.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+        .phase::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            border-radius: 4px 0 0 4px;
+        }
+        .phase.design::before { background: var(--accent-1); }
+        .phase.plan::before { background: var(--accent-5); }
+        .phase.triage::before { background: var(--accent-3); }
+        .phase.implement::before { background: var(--accent-2); }
+        .phase.review::before { background: var(--accent-4); }
+        .phase.merge::before { background: var(--accent-6); }
+        
+        .phase-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .phase-badge {
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 0.25rem 0.75rem;
+            border-radius: 100px;
+            color: white;
+        }
+        .phase-badge.interactive { background: var(--accent-1); }
+        .phase-badge.autonomous { background: var(--accent-2); }
+        
+        .phase-number {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: white;
+            flex-shrink: 0;
+        }
+        .phase.design .phase-number { background: var(--accent-1); }
+        .phase.plan .phase-number { background: var(--accent-5); }
+        .phase.triage .phase-number { background: var(--accent-3); }
+        .phase.implement .phase-number { background: var(--accent-2); }
+        .phase.review .phase-number { background: var(--accent-4); }
+        .phase.merge .phase-number { background: var(--accent-6); }
+        
+        .phase-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+        
+        .phase-body h4 {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin: 1.2rem 0 0.6rem;
+        }
+        .phase-body h4:first-child { margin-top: 0; }
+        
+        .phase-body p {
+            color: var(--text-muted);
+            font-size: 0.92rem;
+            margin-bottom: 0.8rem;
+        }
+        
+        .phase-body ul {
+            list-style: none;
+            margin-bottom: 0.8rem;
+        }
+        .phase-body ul li {
+            position: relative;
+            padding-left: 1.4rem;
+            font-size: 0.92rem;
+            color: var(--text-muted);
+            margin-bottom: 0.35rem;
+        }
+        .phase-body ul li::before {
+            content: '→';
+            position: absolute;
+            left: 0;
+            color: var(--border);
+            font-weight: 600;
+        }
+        
+        .cmd {
+            display: inline-block;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.15rem 0.6rem;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 0.82rem;
+            color: var(--accent-1-light);
+        }
+        
+        .output {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1rem 1.2rem;
+            margin: 0.8rem 0;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            overflow-x: auto;
+            white-space: pre;
+        }
+        
+        /* ── Architecture Diagram ── */
+        .arch-diagram {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 2rem;
+            margin: 2rem 0;
+        }
+        
+        .flow-row {
+            display: flex;
+            align-items: stretch;
+            gap: 0;
+            margin-bottom: 0;
+        }
+        .flow-node {
+            flex: 1;
+            padding: 1rem;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 70px;
+        }
+        .flow-box {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 0.8rem 1.2rem;
+            text-align: center;
+            width: 100%;
+        }
+        .flow-box-name {
+            font-weight: 700;
+            font-size: 0.85rem;
+            margin-bottom: 0.2rem;
+        }
+        .flow-box-detail {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }
+        .flow-connector {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            color: var(--border);
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+        
+        .parallel-row {
+            display: flex;
+            gap: 1rem;
+            margin: 0.5rem 0;
+        }
+        .parallel-agent {
+            flex: 1;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1rem;
+            position: relative;
+        }
+        .parallel-agent-label {
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 0.6rem;
+        }
+        .parallel-step {
+            font-size: 0.78rem;
+            padding: 0.3rem 0;
+            color: var(--text-muted);
+        }
+        .parallel-step-num {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 18px;
+            font-size: 0.65rem;
+            font-weight: 700;
+            color: white;
+            margin-right: 0.4rem;
+        }
+        
+        .label-tag {
+            display: inline-block;
+            padding: 0.1rem 0.5rem;
+            border-radius: 100px;
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+        }
+        .label-ready { background: #0E8A1633; color: var(--accent-2-light); }
+        .label-progress { background: #B6020533; color: #f87171; }
+        .label-needs { background: #EDEDED33; color: var(--text-muted); }
+        
+        /* ── Files produced ── */
+        .files-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+        .file-card {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1rem;
+        }
+        .file-card-name {
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 0.82rem;
+            font-weight: 600;
+            margin-bottom: 0.3rem;
+        }
+        .file-card-desc {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+        
+        /* ── Timeline ── */
+        .timeline {
+            position: relative;
+            padding-left: 2rem;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 8px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: var(--border);
+        }
+        .timeline-item {
+            position: relative;
+            padding-bottom: 1.5rem;
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -2rem;
+            top: 6px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            border: 2px solid var(--border);
+            background: var(--bg);
+        }
+        .timeline-item.active::before {
+            background: var(--accent-2);
+            border-color: var(--accent-2);
+        }
+        .timeline-time {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 0.15rem;
+        }
+        .timeline-content {
+            font-size: 0.9rem;
+        }
+        .timeline-content .cmd { margin: 0.2rem 0; }
+        
+        /* ── Responsive ── */
+        @media (max-width: 768px) {
+            .hero h1 { font-size: 2rem; }
+            .pipeline { flex-wrap: wrap; justify-content: flex-start; padding: 2rem 0; }
+            .pipeline-arrow { display: none; }
+            .files-grid { grid-template-columns: 1fr; }
+            .parallel-row { flex-direction: column; }
+            .flow-row { flex-direction: column; }
+            .flow-connector { transform: rotate(90deg); width: auto; height: 30px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ═══════════ HERO ═══════════ -->
+<div class="hero">
+    <div class="container">
+        <h1>Pi Agent Workflow</h1>
+        <p>From idea to deployed code — design interactively, implement autonomously. Six phases, one seamless loop.</p>
+    </div>
+</div>
+
+<!-- ═══════════ PIPELINE OVERVIEW ═══════════ -->
+<div class="container">
+    <div class="pipeline">
+        <div class="pipeline-step">
+            <div class="pipeline-icon" style="background: var(--accent-1)22; border: 1px solid var(--accent-1)44;">🔥</div>
+            <div class="pipeline-label" style="color: var(--accent-1-light);">Grill</div>
+            <div class="pipeline-sublabel">Interactive</div>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step">
+            <div class="pipeline-icon" style="background: var(--accent-5)22; border: 1px solid var(--accent-5)44;">📄</div>
+            <div class="pipeline-label" style="color: var(--accent-5);">PRD</div>
+            <div class="pipeline-sublabel">Interactive</div>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step">
+            <div class="pipeline-icon" style="background: var(--accent-5)22; border: 1px solid var(--accent-5)44;">🔪</div>
+            <div class="pipeline-label" style="color: var(--accent-5);">Slice</div>
+            <div class="pipeline-sublabel">Interactive</div>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step">
+            <div class="pipeline-icon" style="background: var(--accent-3)22; border: 1px solid var(--accent-3)44;">🏷️</div>
+            <div class="pipeline-label" style="color: var(--accent-3-light);">Triage</div>
+            <div class="pipeline-sublabel">Interactive</div>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step">
+            <div class="pipeline-icon" style="background: var(--accent-2)22; border: 1px solid var(--accent-2)44;">🤖</div>
+            <div class="pipeline-label" style="color: var(--accent-2-light);">Ralph</div>
+            <div class="pipeline-sublabel">Autonomous</div>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step">
+            <div class="pipeline-icon" style="background: var(--accent-6)22; border: 1px solid var(--accent-6)44;">🔀</div>
+            <div class="pipeline-label" style="color: var(--accent-6);">Merge</div>
+            <div class="pipeline-sublabel">You accept</div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════ DETAILED PHASES ═══════════ -->
+<div class="container">
+
+    <!-- ── Phase 1: Grill ── -->
+    <div class="section">
+        <div class="phase design">
+            <div class="phase-header">
+                <div class="phase-number">1</div>
+                <div>
+                    <div class="phase-title">Grill Yourself <span class="cmd">/skill:grill-with-docs</span></div>
+                </div>
+                <span class="phase-badge interactive">Interactive · 30-45 min</span>
+            </div>
+            <div class="phase-body">
+                <p>The agent interviews you relentlessly about your plan — one question at a time, walking down every branch of the decision tree. It explores the codebase to ground questions in reality.</p>
+                
+                <h4>What happens</h4>
+                <ul>
+                    <li>Challenge your assumptions against existing code and domain language</li>
+                    <li>Sharpen fuzzy terminology into precise canonical terms</li>
+                    <li>Stress-test with concrete edge-case scenarios</li>
+                    <li>Cross-reference your claims with actual code</li>
+                </ul>
+                
+                <h4>Files produced</h4>
+                <div class="files-grid">
+                    <div class="file-card">
+                        <div class="file-card-name" style="color: var(--accent-1-light);">CONTEXT.md</div>
+                        <div class="file-card-desc">Domain glossary — shared vocabulary for every future session</div>
+                    </div>
+                    <div class="file-card">
+                        <div class="file-card-name" style="color: var(--accent-1-light);">docs/adr/*.md</div>
+                        <div class="file-card-desc">Architectural Decision Records — hard-to-reverse choices</div>
+                    </div>
+                </div>
+                
+                <h4>Why it matters</h4>
+                <p>The shared vocabulary makes every future session ~30% more token-efficient. This is the highest-leverage step — always start here.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Phase 2: PRD ── -->
+    <div class="section">
+        <div class="phase plan">
+            <div class="phase-header">
+                <div class="phase-number">2</div>
+                <div>
+                    <div class="phase-title">Write the PRD <span class="cmd">/skill:to-prd</span></div>
+                </div>
+                <span class="phase-badge interactive">Interactive · 5 min</span>
+            </div>
+            <div class="phase-body">
+                <p>Synthesizes the grilling session into a Product Requirements Document. Published as a GitHub issue labeled <span class="label-tag label-needs">needs-triage</span>.</p>
+                
+                <h4>PRD structure</h4>
+                <div class="output">Problem Statement
+Solution
+User Stories (numbered, extensive)
+Implementation Decisions (modules, interfaces, schema)
+Testing Decisions (what to test, how)
+Out of Scope
+Further Notes</div>
+                
+                <p>The PRD uses vocabulary from CONTEXT.md and respects ADRs — ensuring continuity from the grilling session.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Phase 3: To Issues ── -->
+    <div class="section">
+        <div class="phase plan">
+            <div class="phase-header">
+                <div class="phase-number">3</div>
+                <div>
+                    <div class="phase-title">Break into Vertical Slices <span class="cmd">/skill:to-issues</span></div>
+                </div>
+                <span class="phase-badge interactive">Interactive · 10-15 min</span>
+            </div>
+            <div class="phase-body">
+                <p>The PRD is broken into <strong>tracer bullet</strong> issues — each one a thin vertical slice through ALL layers (route → service → db → UI → test). Never horizontal (one layer only).</p>
+                
+                <h4>Each issue includes</h4>
+                <ul>
+                    <li><strong>Parent</strong> — link back to the PRD</li>
+                    <li><strong>What to build</strong> — end-to-end behavior description</li>
+                    <li><strong>Acceptance criteria</strong> — testable, behavioral checkboxes</li>
+                    <li><strong>Blocked by</strong> — dependency on other issues (or "can start immediately")</li>
+                    <li><strong>Type</strong> — HITL (needs human) or AFK (agent can do it)</li>
+                </ul>
+                
+                <h4>Vertical vs Horizontal</h4>
+                <div class="output"><span style="color: var(--accent-2-light);">✅ Vertical:</span> "User can sign up" → route + form + validation + service + db + tests
+<span style="color: var(--accent-4);">❌ Horizontal:</span> "Add all database models" → only schema, nothing demoable</div>
+                
+                <p>Issues are published in dependency order (blockers first) so <span class="cmd">Blocked by</span> references are real issue numbers.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Phase 4: Triage ── -->
+    <div class="section">
+        <div class="phase triage">
+            <div class="phase-header">
+                <div class="phase-number">4</div>
+                <div>
+                    <div class="phase-title">Triage <span class="cmd">/skill:triage</span></div>
+                </div>
+                <span class="phase-badge interactive">Interactive · 10 min</span>
+            </div>
+            <div class="phase-body">
+                <p>Issues flow through a state machine. Each issue gets exactly one <strong>category</strong> (bug/enhancement) and one <strong>state</strong> label.</p>
+                
+                <h4>State machine</h4>
+                <div class="output">                    ┌──────────────┐
+                    │   unlabeled   │
+                    └──────┬───────┘
+                           ▼
+                    ┌──────────────┐
+   ┌────────────── │ needs-triage │ ──────────────┐
+   │               └──────┬───────┘               │
+   ▼                      ▼                        ▼
+┌────────────┐   ┌───────────────┐        ┌──────────────┐
+│  wontfix   │   │   needs-info  │        │ ready-for-   │
+│  (closed)  │   │ (waiting on   │        │   human      │
+└────────────┘   │  reporter)    │        └──────────────┘
+                 └───────┬───────┘
+                         │ (reporter replies)
+                         ▼
+                  ┌──────────────┐
+                  │ needs-triage │ (re-evaluate)
+                  └──────┬───────┘
+                         ▼
+                  ┌──────────────┐
+                  │ ready-for-   │ ← THIS IS THE GOAL
+                  │   agent      │
+                  └──────────────┘</div>
+                
+                <p>For each <span class="label-tag label-ready">ready-for-agent</span> issue, the agent writes an <strong>agent brief</strong> — a behavioral contract specifying exactly what the autonomous agent should implement.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Phase 5: Ralph ── -->
+    <div class="section">
+        <div class="phase implement">
+            <div class="phase-header">
+                <div class="phase-number">5</div>
+                <div>
+                    <div class="phase-title">Ralph — Autonomous Implementation <span class="cmd">/ralph start N</span></div>
+                </div>
+                <span class="phase-badge autonomous">Autonomous · 30-60 min</span>
+            </div>
+            <div class="phase-body">
+                <p>N parallel agents work in isolated Docker sandboxes, each in its own git worktree. Coordination through GitHub labels — no file conflicts, no collisions.</p>
+                
+                <h4>Architecture</h4>
+                <div class="arch-diagram">
+                    <div style="text-align: center; margin-bottom: 1.5rem;">
+                        <div class="flow-box" style="display: inline-block;">
+                            <div class="flow-box-name">/ralph start 3</div>
+                            <div class="flow-box-detail">Extension creates 3 worktrees + 3 tmux sessions</div>
+                        </div>
+                    </div>
+                    
+                    <div class="parallel-row">
+                        <div class="parallel-agent">
+                            <div class="parallel-agent-label" style="color: var(--accent-2-light);">Agent A</div>
+                            <div class="parallel-step"><span class="parallel-step-num" style="background: var(--accent-1);">1</span> Fetch <span class="label-tag label-ready">ready-for-agent</span> issues</div>
+                            <div class="parallel-step"><span class="parallel-step-num" style="background: var(--accent-1);">2</span> Plan: read criteria, explore code, list behaviors</div>
+                            <div class="parallel-step"><span class="parallel-step-num" style="background: var(--accent-1);">3</span> Claim issue → <span class="label-tag label-progress">in-progress</span></div>
+                            <div class="parallel-step"><span class="parallel-step-num" style="background: var(--accent-2);">4</span> Implement with TDD (red-green-refactor)</div>
+                            <div class="parallel-step"><span class="parallel-step-num" style="background: var(--accent-2);">5</span> Feedback loops: test + typecheck + build</div>
+                            <div class="parallel-step"><span class="parallel-step-num" style="background: var(--accent-2);">6</span> Commit + push + close issue</div>
+                            <div class="parallel-step"><span class="parallel-step-num" style="background: var(--accent-4);">7</span> <strong>Reviewer</strong>: fresh agent reviews diff</div>
+                            <div class="parallel-step"><span class="parallel-step-num" style="background: var(--accent-4);">8</span> Fix or reopen → loop to step 1</div>
+                        </div>
+                        <div class="parallel-agent">
+                            <div class="parallel-agent-label" style="color: var(--accent-2-light);">Agent B</div>
+                            <div class="parallel-step"><span class="parallel-step-num" style="background: var(--accent-1);">1</span> Fetch <span class="label-tag label-ready">ready-for-agent</span> issues</div>
+                            <div class="parallel-step"><span class="parallel-step-num" style="background: var(--accent-1);">2</span> Plan: read criteria, explore code, list behaviors</div>
+                            <div class="parallel-step"><span class="parallel-step-num" style="background: var(--accent-1);">3</span> Claim issue → <span class="label-tag label-progress">in-progress</span></div>
+                            <div class="parallel-step"><span class="parallel-step-num" style="background: var(--accent-2);">4</span> Implement with TDD (red-green-refactor)</div>
+                            <div class="parallel-step"><span class="parallel-step-num" style="background: var(--accent-2);">5</span> Feedback loops: test + typecheck + build</div>
+                            <div class="parallel-step"><span class="parallel-step-num" style="background: var(--accent-2);">6</span> Commit + push + close issue</div>
+                            <div class="parallel-step"><span class="parallel-step-num" style="background: var(--accent-4);">7</span> <strong>Reviewer</strong>: fresh agent reviews diff</div>
+                            <div class="parallel-step"><span class="parallel-step-num" style="background: var(--accent-4);">8</span> Fix or reopen → loop to step 1</div>
+                        </div>
+                        <div class="parallel-agent">
+                            <div class="parallel-agent-label" style="color: var(--accent-2-light);">Agent C</div>
+                            <div class="parallel-step"><span class="parallel-step-num" style="background: var(--accent-1);">1</span> Fetch <span class="label-tag label-ready">ready-for-agent</span> issues</div>
+                            <div class="parallel-step"><span class="parallel-step-num" style="background: var(--accent-1);">2</span> Plan: read criteria, explore code, list behaviors</div>
+                            <div class="parallel-step"><span class="parallel-step-num" style="background: var(--accent-1);">3</span> Claim issue → <span class="label-tag label-progress">in-progress</span></div>
+                            <div class="parallel-step"><span class="parallel-step-num" style="background: var(--accent-2);">4</span> Implement with TDD (red-green-refactor)</div>
+                            <div class="parallel-step"><span class="parallel-step-num" style="background: var(--accent-2);">5</span> Feedback loops: test + typecheck + build</div>
+                            <div class="parallel-step"><span class="parallel-step-num" style="background: var(--accent-2);">6</span> Commit + push + close issue</div>
+                            <div class="parallel-step"><span class="parallel-step-num" style="background: var(--accent-4);">7</span> <strong>Reviewer</strong>: fresh agent reviews diff</div>
+                            <div class="parallel-step"><span class="parallel-step-num" style="background: var(--accent-4);">8</span> Fix or reopen → loop to step 1</div>
+                        </div>
+                    </div>
+                    
+                    <div style="text-align: center; margin-top: 1rem;">
+                        <div style="color: var(--text-muted); font-size: 0.78rem;">Coordination via GitHub labels — agents never share filesystem</div>
+                    </div>
+                </div>
+                
+                <h4>Key safety mechanisms</h4>
+                <ul>
+                    <li><strong>Vertical slice validation</strong> — agent refuses horizontal issues, flags back to triage</li>
+                    <li><strong>Feedback loops required</strong> — tests + typecheck + build must pass before commit</li>
+                    <li><strong>Separate reviewer</strong> — fresh agent with no sunk-cost bias</li>
+                    <li><strong>Issue closed immediately</strong> — blockers resolve for other agents in real-time</li>
+                    <li><strong>Dependency-aware</strong> — agent skips blocked issues, picks them up in next iteration</li>
+                </ul>
+                
+                <h4>Commands</h4>
+                <div class="output"><span style="color: var(--accent-2-light);">/ralph start 3</span>    Launch 3 parallel Docker agents
+<span style="color: var(--accent-2-light);">/ralph status</span>     Show sessions + issues + worktrees
+<span style="color: var(--accent-2-light);">/ralph log</span>        Tail latest session output
+<span style="color: var(--accent-2-light);">/ralph stop</span>       Stop all sessions + clean worktrees
+<span style="color: var(--accent-2-light);">/ralph recover</span>    Un-claim stale issues (only when no agents running)</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Phase 6: Merge ── -->
+    <div class="section">
+        <div class="phase merge">
+            <div class="phase-header">
+                <div class="phase-number">6</div>
+                <div>
+                    <div class="phase-title">Batch Merge <span class="cmd">/ralph merge</span></div>
+                </div>
+                <span class="phase-badge autonomous">Autonomous + You Accept</span>
+            </div>
+            <div class="phase-body">
+                <p>After all agents finish, a merge agent creates a dedicated branch and reconciles everything. Your <span style="color: var(--accent-6);">main</span> branch is never touched automatically.</p>
+                
+                <div class="arch-diagram">
+                    <div class="flow-row" style="justify-content: center;">
+                        <div class="flow-node">
+                            <div class="flow-box" style="border-color: var(--accent-6)44;">
+                                <div class="flow-box-name" style="color: var(--accent-6);">main</div>
+                                <div class="flow-box-detail">your base branch (untouched)</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="text-align: center; color: var(--border); font-size: 0.9rem; padding: 0.3rem 0;">↓ forks from</div>
+                    <div class="flow-row" style="justify-content: center; gap: 0.8rem;">
+                        <div class="flow-node">
+                            <div class="flow-box">
+                                <div class="flow-box-name">agent/42-fix</div>
+                            </div>
+                        </div>
+                        <div class="flow-node">
+                            <div class="flow-box">
+                                <div class="flow-box-name">agent/50-feat</div>
+                            </div>
+                        </div>
+                        <div class="flow-node">
+                            <div class="flow-box">
+                                <div class="flow-box-name">agent/51-ref</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="text-align: center; color: var(--border); font-size: 0.9rem; padding: 0.3rem 0;">↓ merge agent combines into</div>
+                    <div class="flow-row" style="justify-content: center;">
+                        <div class="flow-node">
+                            <div class="flow-box" style="border-color: var(--accent-2)44; background: var(--accent-2)11;">
+                                <div class="flow-box-name" style="color: var(--accent-2-light);">agent/merge-batch-2026-05-05</div>
+                                <div class="flow-box-detail">dedicated merge branch — tests run after each merge</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="text-align: center; color: var(--border); font-size: 0.9rem; padding: 0.3rem 0;">↓ you review and accept</div>
+                    <div class="flow-row" style="justify-content: center;">
+                        <div class="flow-node">
+                            <div class="flow-box" style="border-color: var(--accent-6)44;">
+                                <div class="flow-box-name" style="color: var(--accent-6);">main</div>
+                                <div class="flow-box-detail">you merge when happy</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h4>What the merge agent does</h4>
+                <ul>
+                    <li>Creates <span class="cmd">agent/merge-batch-&lt;date&gt;</span> from your base branch</li>
+                    <li>Merges each <span class="cmd">agent/*</span> branch one at a time</li>
+                    <li>Runs tests after each merge</li>
+                    <li>Resolves conflicts if needed</li>
+                    <li>Cleans up merged branches</li>
+                    <li>Never touches the base branch or issue state</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Full Timeline ── -->
+    <div class="section">
+        <div class="section-title">Full Timeline</div>
+        <div class="section-subtitle">A typical session from idea to merged code</div>
+        
+        <div class="timeline">
+            <div class="timeline-item active">
+                <div class="timeline-time">0:00</div>
+                <div class="timeline-content">Start Pi, run <span class="cmd">/skill:grill-with-docs</span></div>
+            </div>
+            <div class="timeline-item active">
+                <div class="timeline-time">0:35</div>
+                <div class="timeline-content">Run <span class="cmd">/skill:to-prd</span> → PRD published as GitHub issue</div>
+            </div>
+            <div class="timeline-item active">
+                <div class="timeline-time">0:40</div>
+                <div class="timeline-content">Run <span class="cmd">/skill:to-issues</span> → 6 vertical slices published</div>
+            </div>
+            <div class="timeline-item active">
+                <div class="timeline-time">0:55</div>
+                <div class="timeline-content">Run <span class="cmd">/skill:triage</span> → issues move to <span class="label-tag label-ready">ready-for-agent</span></div>
+            </div>
+            <div class="timeline-item active">
+                <div class="timeline-time">1:05</div>
+                <div class="timeline-content">Run <span class="cmd">/ralph start 3</span> → go get coffee ☕</div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-time">1:05 - 2:00</div>
+                <div class="timeline-content">3 agents working in parallel — implement, review, close issues</div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-time">2:00</div>
+                <div class="timeline-content">Agents done. Run <span class="cmd">/ralph merge</span></div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-time">2:05</div>
+                <div class="timeline-content">Review <span class="cmd">agent/merge-batch-2026-05-05</span>, accept into main</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Quick Reference ── -->
+    <div class="section" style="padding-bottom: 5rem;">
+        <div class="section-title">Quick Reference</div>
+        <div class="section-subtitle">All commands at a glance</div>
+        
+        <div class="arch-diagram">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+                <div>
+                    <h4 style="font-size: 0.8rem; font-weight: 700; color: var(--accent-1-light); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.8rem;">Interactive Skills</h4>
+                    <div class="output" style="margin: 0;"><span style="color: var(--accent-1-light);">/skill:grill-with-docs</span>  Stress-test your plan
+<span style="color: var(--accent-1-light);">/skill:to-prd</span>           Write PRD from context
+<span style="color: var(--accent-1-light);">/skill:to-issues</span>        Break PRD into slices
+<span style="color: var(--accent-1-light);">/skill:triage</span>           Move issues through states
+<span style="color: var(--accent-1-light);">/skill:review-issue</span>     Validate issue before agent
+<span style="color: var(--accent-1-light);">/skill:tdd</span>             Red-green-refactor loop
+<span style="color: var(--accent-1-light);">/skill:diagnose</span>         Debug hard problems</div>
+                </div>
+                <div>
+                    <h4 style="font-size: 0.8rem; font-weight: 700; color: var(--accent-2-light); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.8rem;">Autonomous Commands</h4>
+                    <div class="output" style="margin: 0;"><span style="color: var(--accent-2-light);">/ralph init</span>      Setup project for ralph
+<span style="color: var(--accent-2-light);">/ralph start [N]</span>  Launch N parallel agents
+<span style="color: var(--accent-2-light);">/ralph local [N]</span>  Same, without Docker
+<span style="color: var(--accent-2-light);">/ralph status</span>     Sessions + issues + worktrees
+<span style="color: var(--accent-2-light);">/ralph log</span>        Tail session output
+<span style="color: var(--accent-2-light);">/ralph stop</span>       Stop + clean worktrees
+<span style="color: var(--accent-2-light);">/ralph recover</span>    Un-claim stale issues
+<span style="color: var(--accent-2-light);">/ralph merge</span>      Merge branches into batch</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+</body>
+</html>
