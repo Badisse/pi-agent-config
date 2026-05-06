@@ -65,10 +65,26 @@ export async function blockProtectedBranchCommit(
 	if (!currentBranch) return undefined;
 
 	if (isProtectedBranch(currentBranch, config.protectedBranches)) {
-		ctx.ui.notify(
-			`Direct commits to "${currentBranch}" are blocked. Use /commit on an agent branch.`,
-			"warning",
+		// No UI (AFK mode) — hard block
+		if (!ctx.hasUI) {
+			return {
+				block: true,
+				reason: `Direct commits to "${currentBranch}" are not allowed in AFK mode.`,
+			};
+		}
+
+		// Interactive — ask the user
+		const choice = await ctx.ui.select(
+			`You're about to commit directly to "${currentBranch}". This is usually not recommended. Proceed anyway?`,
+			["Yes, commit on " + currentBranch, "No, switch branch first"],
 		);
+
+		if (choice === "Yes, commit on " + currentBranch) {
+			ctx.ui.notify(`Overridden — committing on "${currentBranch}".`, "info");
+			return undefined; // allow
+		}
+
+		ctx.ui.notify("Commit blocked. Switch to an agent branch first.", "warning");
 		return {
 			block: true,
 			reason: `Direct commits to "${currentBranch}" are not allowed. Switch to an agent branch first.`,

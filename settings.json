@@ -1,6 +1,6 @@
 {
   "enableInstallTelemetry": false,
-  "lastChangelogVersion": "0.72.1",
+  "lastChangelogVersion": "0.73.0",
   "packages": [
     "npm:context-mode",
     "npm:pi-subagents",
