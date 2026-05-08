@@ -3,6 +3,8 @@ auth.json
 pi-crash.log
 sessions/
 bin/
+mcp-oauth/
+mcp-cache.json
 
 # Docs build
 site/
