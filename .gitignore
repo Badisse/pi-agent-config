@@ -5,6 +5,8 @@ sessions/
 bin/
 mcp-oauth/
 mcp-cache.json
+mcp-onboarding.json
+run-history.jsonl
 
 # Docs build
 site/
