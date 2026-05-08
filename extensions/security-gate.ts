@@ -25,11 +25,45 @@
  * (alphabetical), so its lazy auto-branching in tool_call creates a branch
  * before we check if the commit targets a protected branch.
  *
+ * Configuration:
+ *   Per-project overrides in `.pi/security-gate.json`:
+ *   {
+ *     "protectedBranches": ["main", "master", "develop"]
+ *   }
+ *
  * Auto-allowed:
  *   - Everything else (ls, cat, grep, git status, etc.)
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import * as fs from "node:fs";
+import * as path from "node:path";
+
+// ── Config ────────────────────────────────────────────────────
+
+interface SecurityGateConfig {
+	protectedBranches: string[];
+}
+
+const DEFAULT_CONFIG: SecurityGateConfig = {
+	protectedBranches: ["main", "master"],
+};
+
+let config: SecurityGateConfig = { ...DEFAULT_CONFIG };
+
+function loadConfig(cwd: string): void {
+	const configPath = path.join(cwd, ".pi", "security-gate.json");
+	try {
+		const raw = fs.readFileSync(configPath, "utf8");
+		const parsed = JSON.parse(raw) as Partial<SecurityGateConfig>;
+		config = {
+			...DEFAULT_CONFIG,
+			protectedBranches: parsed.protectedBranches ?? DEFAULT_CONFIG.protectedBranches,
+		};
+	} catch {
+		config = { ...DEFAULT_CONFIG };
+	}
+}
 
 // ── Hard-blocked (no prompt, always denied) ───────────────────
 const HARDBLOCKED: { pattern: RegExp; reason: string }[] = [
@@ -45,7 +79,7 @@ const PROMPTED: { pattern: RegExp; label: string }[] = [
 	// Disguised destructive
 	{ pattern: /\bcp\s+\/dev\/null\b/i, label: "⚠️ Destructive: overwrite with null" },
 	{ pattern: /\btruncate\b/i, label: "⚠️ Destructive: truncate file" },
-	{ pattern: /\bdd\s+/i, label: "⚠️ Destructive: dd command" },
+	{ pattern: /\bdd\b/i, label: "⚠️ Destructive: dd command" },
 	// Download & execute
 	{ pattern: /\b(curl|wget)\b.*(\|\s*(ba)?sh|&&\s*(ba)?sh)/i, label: "⚠️ Download & execute" },
 	// Package installs
@@ -120,6 +154,11 @@ function isSensitiveVar(name: string): boolean {
 	return SENSITIVE_VAR_PATTERNS.some((p) => p.test(name));
 }
 
+/**
+ * Check env var access — scans ALL $VAR references before deciding.
+ * Returns blocked if any sensitive var is found, otherwise prompts
+ * for the first non-sensitive var found.
+ */
 function checkEnvAccess(command: string): { blocked: boolean; prompt?: string; reason?: string } {
 	// 1. Block env dump commands (always hard-blocked)
 	for (const { pattern, reason } of ENV_DUMP_BLOCKED) {
@@ -128,22 +167,28 @@ function checkEnvAccess(command: string): { blocked: boolean; prompt?: string; r
 		}
 	}
 
-	// 2. Check $VAR and ${VAR} references
-	for (const match of command.matchAll(/\$\{?([A-Z_][A-Z0-9_]*)\}?/g)) {
+	// 2. Scan ALL $VAR and ${VAR} references — check every one before deciding
+	const varMatches = [...command.matchAll(/\$\{?([A-Z_][A-Z0-9_]*)\}?/g)];
+	const printenvMatches = [...command.matchAll(/\bprintenv\s+([A-Z_][A-Z0-9_]*)/g)];
+
+	// Check for any sensitive vars first
+	for (const match of varMatches) {
 		if (isSensitiveVar(match[1])) {
 			return { blocked: true, reason: `Access to sensitive env var blocked: ${match[1]}` };
 		}
-		// Non-sensitive var read — prompt user
-		return { blocked: false, prompt: `🔑 Access to env var: ${match[1]}` };
+	}
+	for (const match of printenvMatches) {
+		if (isSensitiveVar(match[1])) {
+			return { blocked: true, reason: `Access to sensitive env var blocked: ${match[1]}` };
+		}
 	}
 
-	// 3. Check printenv with specific var name
-	for (const match of command.matchAll(/\bprintenv\s+([A-Z_][A-Z0-9_]*)/g)) {
-		if (isSensitiveVar(match[1])) {
-			return { blocked: true, reason: `Access to sensitive env var blocked: ${match[1]}` };
-		}
-		// Non-sensitive var read — prompt user
-		return { blocked: false, prompt: `🔑 Access to env var: ${match[1]}` };
+	// No sensitive vars found — prompt for the first non-sensitive var
+	if (varMatches.length > 0) {
+		return { blocked: false, prompt: `🔑 Access to env var: ${varMatches[0][1]}` };
+	}
+	if (printenvMatches.length > 0) {
+		return { blocked: false, prompt: `🔑 Access to env var: ${printenvMatches[0][1]}` };
 	}
 
 	return { blocked: false };
@@ -153,9 +198,28 @@ function checkEnvAccess(command: string): { blocked: boolean; prompt?: string; r
 const GIT_PUSH_ANY = /\bgit\s+push\b/i;
 const GIT_PUSH_MAIN_EXPLICIT = /\bgit\s+push\b.*\b(main|master)\b/i;
 const GIT_COMMIT_ANY = /\bgit\s+commit\b/i;
-const PROTECTED_BRANCHES = new Set(["main", "master"]);
 
-async function isPushToProtectedBranch(command: string, ctx: any): Promise<boolean> {
+/**
+ * Resolve the current git branch. Returns undefined if not in a repo
+ * or branch can't be determined. Cached per tool_call.
+ */
+async function resolveCurrentBranch(ctx: ExtensionContext): Promise<string | undefined> {
+	try {
+		const result = await ctx.exec("git", ["branch", "--show-current"], { timeout: 3000 });
+		const branch = result.stdout.trim();
+		return branch || undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+function isProtectedBranch(branch: string): boolean {
+	return config.protectedBranches.some(
+		(b) => b.toLowerCase() === branch.toLowerCase(),
+	);
+}
+
+async function isPushToProtectedBranch(command: string, ctx: ExtensionContext, currentBranch: string | undefined): Promise<boolean> {
 	// 1. Explicit branch name in command
 	if (GIT_PUSH_MAIN_EXPLICIT.test(command)) return true;
 	if (!GIT_PUSH_ANY.test(command)) return false;
@@ -165,27 +229,9 @@ async function isPushToProtectedBranch(command: string, ctx: any): Promise<boole
 	const hasExplicitBranch = /\bgit\s+push\s+\S+\s+(?!HEAD)(?!--)/.test(command) && !/(?:^|\s)git\s+push\s*$/.test(command);
 	if (hasExplicitBranch && !GIT_PUSH_MAIN_EXPLICIT.test(command)) return false;
 
-	try {
-		const result = await ctx.exec("git", ["branch", "--show-current"], { timeout: 3000 });
-		const branch = result.stdout.trim();
-		return PROTECTED_BRANCHES.has(branch);
-	} catch {
-		// Can't detect branch — assume protected to be safe
-		return true;
-	}
-}
-
-async function isCommitOnProtectedBranch(command: string, ctx: any): Promise<boolean> {
-	if (!GIT_COMMIT_ANY.test(command)) return false;
-
-	try {
-		const result = await ctx.exec("git", ["branch", "--show-current"], { timeout: 3000 });
-		const branch = result.stdout.trim();
-		return PROTECTED_BRANCHES.has(branch);
-	} catch {
-		// Can't detect branch — assume protected to be safe
-		return true;
-	}
+	// Can't detect branch — assume protected to be safe
+	if (!currentBranch) return true;
+	return isProtectedBranch(currentBranch);
 }
 
 // ── Docker detection ──────────────────────────────────────────
@@ -193,8 +239,6 @@ let _isDocker: boolean | undefined;
 function isDocker(): boolean {
 	if (_isDocker !== undefined) return _isDocker;
 	try {
-		// Docker creates /.dockerenv in containers
-		const fs = require("fs");
 		_isDocker = fs.existsSync("/.dockerenv");
 	} catch {
 		_isDocker = false;
@@ -207,7 +251,7 @@ function isDocker(): boolean {
 //   1. No UI (AFK mode) AND
 //   2. Running inside Docker (sandboxed)
 // Local AFK (afk-local.sh) still blocks prompted commands.
-function isTrustedAFK(ctx: any): boolean {
+function isTrustedAFK(ctx: ExtensionContext): boolean {
 	return !ctx.hasUI && isDocker();
 }
 
@@ -215,8 +259,35 @@ function truncate(text: string, maxLen: number): string {
 	return text.length > maxLen ? text.slice(0, maxLen) + "…" : text;
 }
 
+/** Shared prompt for git operations on protected branches. */
+async function promptProtectedBranch(
+	ctx: ExtensionContext,
+	operation: string,
+	command: string,
+): Promise<{ block: true; reason: string } | undefined> {
+	if (isTrustedAFK(ctx)) {
+		ctx.ui.notify(`🚫 ${operation} on protected branch blocked in AFK mode`, "error");
+		return { block: true, reason: `${operation} on protected branch blocked in AFK: ${command}` };
+	}
+	if (!ctx.hasUI) {
+		return { block: true, reason: `${operation} on protected branch blocked (no UI)` };
+	}
+	const choice = await ctx.ui.select(
+		`🚨 ${operation} ON PROTECTED BRANCH!\n\n  ${truncate(command, 200)}\n\nThis is usually not recommended.`,
+		["No, block it", "Yes, I know what I'm doing"],
+	);
+	if (choice !== "Yes, I know what I'm doing") {
+		ctx.ui.notify(`🚫 ${operation} on protected branch blocked`, "warning");
+		return { block: true, reason: `${operation} on protected branch blocked by user` };
+	}
+	return undefined;
+}
+
+// ── Extension ─────────────────────────────────────────────────
+
 export default function (pi: ExtensionAPI) {
 	pi.on("session_start", async (_event, ctx) => {
+		loadConfig(ctx.cwd);
 		ctx.ui.notify("🔒 Security gate active", "info");
 	});
 
@@ -225,6 +296,13 @@ export default function (pi: ExtensionAPI) {
 
 		const command = event.input.command as string;
 		if (!command) return undefined;
+
+		// Resolve current branch once for all git checks in this call
+		const isGitCommand = GIT_PUSH_ANY.test(command) || GIT_COMMIT_ANY.test(command);
+		let currentBranch: string | undefined;
+		if (isGitCommand) {
+			currentBranch = await resolveCurrentBranch(ctx);
+		}
 
 		// 1. Hard-blocked — always deny
 		for (const { pattern, reason } of HARDBLOCKED) {
@@ -258,48 +336,21 @@ Allow the model to read this env var?`,
 			return undefined;
 		}
 
-		// 3. Git push to main — detect implicit pushes to protected branches
+		// 3. Git push to protected branch
 		if (GIT_PUSH_ANY.test(command)) {
-			const targetsProtected = await isPushToProtectedBranch(command, ctx);
+			const targetsProtected = await isPushToProtectedBranch(command, ctx, currentBranch);
 			if (targetsProtected) {
-				if (isTrustedAFK(ctx)) {
-					ctx.ui.notify("🚫 Push to main/master blocked in AFK mode", "error");
-					return { block: true, reason: `Push to main/master blocked in AFK: ${command}` };
-				}
-				if (!ctx.hasUI) {
-					return { block: true, reason: "Push to main/master blocked (no UI)" };
-				}
-				const choice = await ctx.ui.select(
-					`🚨 PUSHING TO MAIN/MASTER BRANCH!\n\n  ${truncate(command, 200)}\n\nThis is usually not recommended.`,
-					["No, block it", "Yes, I know what I'm doing"],
-				);
-				if (choice !== "Yes, I know what I'm doing") {
-					ctx.ui.notify("🚫 Push to main blocked", "warning");
-					return { block: true, reason: "Push to main blocked by user" };
-				}
+				const blocked = await promptProtectedBranch(ctx, "Push", command);
+				if (blocked) return blocked;
 			}
 			return undefined;
 		}
 
-		// 4. Git commit on main — detect commits to protected branches
+		// 4. Git commit on protected branch
 		if (GIT_COMMIT_ANY.test(command)) {
-			const onProtected = await isCommitOnProtectedBranch(command, ctx);
-			if (onProtected) {
-				if (isTrustedAFK(ctx)) {
-					ctx.ui.notify("🚫 Commit to main/master blocked in AFK mode", "error");
-					return { block: true, reason: `Commit to main/master blocked in AFK: ${command}` };
-				}
-				if (!ctx.hasUI) {
-					return { block: true, reason: "Commit to main/master blocked (no UI)" };
-				}
-				const choice = await ctx.ui.select(
-					`🚨 COMMITTING TO MAIN/MASTER BRANCH!\n\n  ${truncate(command, 200)}\n\nThis is usually not recommended.`,
-					["No, block it", "Yes, I know what I'm doing"],
-				);
-				if (choice !== "Yes, I know what I'm doing") {
-					ctx.ui.notify("🚫 Commit to main blocked", "warning");
-					return { block: true, reason: "Commit to main blocked by user" };
-				}
+			if (currentBranch && isProtectedBranch(currentBranch)) {
+				const blocked = await promptProtectedBranch(ctx, "Commit", command);
+				if (blocked) return blocked;
 			}
 		}
 
@@ -320,7 +371,7 @@ Allow the model to read this env var?`,
 			}
 		}
 
-		// 5. All other commands — auto-allowed
+		// 6. All other commands — auto-allowed
 		return undefined;
 	});
 }
