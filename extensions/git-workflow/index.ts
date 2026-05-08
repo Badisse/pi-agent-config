@@ -2,15 +2,19 @@
  * Git Workflow Extension for Pi
  *
  * Provides a structured git workflow for the AI coding agent:
- * - Agent branch management (auto-create branches off protected branches)
+ * - Lazy agent branch management (auto-create branches on first commit)
  * - Git checkpoints (stash snapshots for /fork restore)
  * - Dirty repo guard (warn on session switch with uncommitted changes)
- * - Protected branch guard (block direct commits to main/master)
  * - Guided conventional commits (/commit command)
  * - Repo status (/git-status command)
  * - PR summary from branch commits (/pr-summary command)
  * - .gitignore guard (warn if missing)
- * - Session naming from branch name
+ *
+ * Branch protection (blocking commits/pushes on main) is handled by security-gate.ts.
+ *
+ * NOTE: Extension load order matters. git-workflow fires before security-gate
+ * (alphabetical), so lazy auto-branching in tool_call happens before
+ * security-gate's protected branch check.
  *
  * Configuration:
  *   Global defaults are defined in config.ts.
@@ -18,8 +22,8 @@
  *
  *   Example `.pi/git-workflow.json`:
  *   {
- *     "branchPrefix": "feature",
- *     "protectedBranches": ["main"],
+ *     "branchPrefix": "agent",
+ *     "autoBranch": true,
  *     "checkpoint": false
  *   }
  */
@@ -27,10 +31,10 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import type { GitWorkflowConfig } from "./config.js";
 import { loadConfig } from "./config-loader.js";
-import { resetBranchState, ensureAgentBranch } from "./branch.js";
+import { initBranchState, ensureBranchForCommit } from "./branch.js";
 import { resetCheckpoints, trackEntry, createCheckpoint, handleForkRestore } from "./checkpoint.js";
 import { registerCommitCommand, validateCommitMessage } from "./commit.js";
-import { dirtyRepoGuard, blockProtectedBranchCommit } from "./guard.js";
+import { dirtyRepoGuard } from "./guard.js";
 import { registerCommands } from "./commands.js";
 import { isGitRepo, getCurrentBranch, fileExists } from "./git-utils.js";
 import { cleanupOldSummaries } from "./pr-summary-html.js";
@@ -49,7 +53,7 @@ export default function gitWorkflowExtension(pi: ExtensionAPI): void {
 		const inRepo = await isGitRepo(pi);
 		if (!inRepo) return;
 
-		resetBranchState();
+		await initBranchState(pi);
 		resetCheckpoints();
 
 		// Sweep old PR summary HTML files (>3 days)
@@ -71,14 +75,6 @@ export default function gitWorkflowExtension(pi: ExtensionAPI): void {
 				);
 			}
 		}
-	});
-
-	// ── Branch management ───────────────────────────────────────
-
-	pi.on("before_agent_start", async (event, ctx) => {
-		if (!config.enabled || !config.autoBranch) return;
-
-		await ensureAgentBranch(pi, ctx, config, event.prompt);
 	});
 
 	// ── Git checkpoints ─────────────────────────────────────────
@@ -122,10 +118,9 @@ export default function gitWorkflowExtension(pi: ExtensionAPI): void {
 			const command = event.input.command as string;
 			if (!command) return undefined;
 
-			// 1. Protected branch guard — block git commit on main/master
-			if (/\bgit\s+commit\b/.test(command)) {
-				const blocked = await blockProtectedBranchCommit(pi, ctx, command, config);
-				if (blocked) return blocked;
+			// 1. Lazy auto-branching — on first git commit from the default branch
+			if (/\bgit\s+commit\b/.test(command) && config.autoBranch) {
+				await ensureBranchForCommit(pi, ctx, config);
 			}
 
 			// 2. Conventional commit validation — validate git commit -m "..." format
@@ -147,10 +142,8 @@ export default function gitWorkflowExtension(pi: ExtensionAPI): void {
 		return dirtyRepoGuard(pi, ctx, action);
 	});
 
-
-
 	// ── Commands ────────────────────────────────────────────────
 
 	registerCommitCommand(pi, () => config);
-	registerCommands(pi);
+	registerCommands(pi, () => config);
 }

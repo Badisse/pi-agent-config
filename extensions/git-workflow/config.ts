@@ -2,6 +2,7 @@
  * Configuration types and defaults for the git-workflow extension.
  *
  * Global defaults can be overridden per-project via `.pi/git-workflow.json`.
+ * Branch protection (blocking commits/pushes on main) is handled by security-gate.ts.
  */
 
 /** Default commit types for conventional commits. */
@@ -23,12 +24,10 @@ export type CommitType = (typeof DEFAULT_COMMIT_TYPES)[number];
 export interface GitWorkflowConfig {
 	/** Enable or disable the extension (default: true) */
 	enabled: boolean;
-	/** Automatically create/switch to agent branches (default: true) */
+	/** Automatically create agent branches on first commit (default: true) */
 	autoBranch: boolean;
 	/** Prefix for agent branches (default: "agent") */
 	branchPrefix: string;
-	/** Branches protected from direct commits (default: ["main", "master"]) */
-	protectedBranches: string[];
 	/** Allow auto-merge to main without user review (default: false) */
 	autoMerge: boolean;
 	/** Enforce conventional commit format (default: true) */
@@ -41,8 +40,6 @@ export interface GitWorkflowConfig {
 	dirtyGuard: boolean;
 	/** Warn if no .gitignore exists when entering a repo (default: true) */
 	gitignoreGuard: boolean;
-	/** Auto-name sessions based on branch name (default: true) */
-	sessionNaming: boolean;
 }
 
 /** Sensible defaults applied globally. */
@@ -50,12 +47,10 @@ export const DEFAULT_CONFIG: GitWorkflowConfig = {
 	enabled: true,
 	autoBranch: true,
 	branchPrefix: "agent",
-	protectedBranches: ["main", "master"],
 	autoMerge: false,
 	conventionalCommits: true,
 	commitTypes: [...DEFAULT_COMMIT_TYPES],
 	checkpoint: true,
 	dirtyGuard: true,
 	gitignoreGuard: true,
-	sessionNaming: true,
 };

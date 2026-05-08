@@ -64,32 +64,18 @@ export async function fileExists(pi: ExtensionAPI, filePath: string): Promise<bo
 	return code === 0;
 }
 
-/** Stage all changes and commit with a message. */
+/** Stage all changes and commit with a message. Uses `git add -A` (includes new files). */
 export async function stageAndCommit(pi: ExtensionAPI, message: string): Promise<boolean> {
 	await pi.exec("git", ["add", "-A"]);
 	const { code } = await pi.exec("git", ["commit", "-m", message]);
 	return code === 0;
 }
 
-/**
- * Get a short, filesystem-safe branch name from a description.
- * Converts to kebab-case and truncates to 50 chars.
- */
-export function toBranchName(prefix: string, description: string): string {
-	const safe = description
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, "-")
-		.replace(/^-|-$/g, "")
-		.slice(0, 50);
-	return `${prefix}/${safe || "work"}`;
-}
-
-/**
- * Get the git user name for commit author info display.
- */
-export async function getGitUserName(pi: ExtensionAPI): Promise<string> {
-	const { stdout } = await pi.exec("git", ["config", "user.name"]);
-	return stdout.trim();
+/** List unstaged and untracked files (porcelain format). */
+export async function listChangedFiles(pi: ExtensionAPI): Promise<string[]> {
+	const { stdout, code } = await pi.exec("git", ["status", "--porcelain"]);
+	if (code !== 0) return [];
+	return stdout.trim().split("\n").filter(Boolean);
 }
 
 /**

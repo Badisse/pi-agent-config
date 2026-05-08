@@ -1,18 +1,21 @@
 /**
  * Commit command — guided conventional commit with type/scope/message picker.
  * Also intercepts `git commit` via bash to validate conventional format when enabled.
+ *
+ * Protected branch blocking is handled by security-gate.ts.
+ * Auto-branching on commit is handled by branch.ts::ensureBranchForCommit().
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import type { GitWorkflowConfig, CommitType } from "./config.js";
+import type { GitWorkflowConfig } from "./config.js";
 import {
 	isGitRepo,
 	isDirty,
 	countChangedFiles,
-	getCurrentBranch,
+	listChangedFiles,
 	stageAndCommit,
 } from "./git-utils.js";
-import { isProtectedBranch } from "./branch.js";
+import { ensureBranchForCommit } from "./branch.js";
 
 /**
  * Register the /commit command.
@@ -31,6 +34,8 @@ export function registerCommitCommand(pi: ExtensionAPI, getConfig: () => GitWork
 /**
  * Intercept `git commit` via bash to validate conventional commit format.
  * Returns a block result if the message doesn't match the expected format.
+ *
+ * Handles flags between `git commit` and `-m` (e.g. `git commit -a -m "msg"`).
  */
 export function validateCommitMessage(
 	command: string,
@@ -38,11 +43,12 @@ export function validateCommitMessage(
 ): { block: true; reason: string } | undefined {
 	if (!config.conventionalCommits) return undefined;
 
-	// Match git commit -m "..." or git commit -m '...'
-	const match = command.match(/git\s+commit\s+(?:-m|--message)\s+["'](.+?)["']/);
+	// Match git commit [...flags...] -m "..." or --message '...'
+	// Allows arbitrary flags (like -a, --amend, etc.) before -m/--message
+	const match = command.match(/git\s+commit\s+(?:\s+\S+)*\s*(-m|--message)\s+["'](.+?)["']/);
 	if (!match) return undefined; // no inline message, let it through (editor-based commits)
 
-	const message = match[1];
+	const message = match[2];
 	const pattern = /^(\w+)(?:\(([^)]+)\))?:\s+.+/;
 
 	if (!pattern.test(message)) {
@@ -65,7 +71,8 @@ export function validateCommitMessage(
 }
 
 /**
- * Interactive commit flow: pick type → optional scope → message → commit.
+ * Interactive commit flow: pick type → optional scope → message → confirm files → commit.
+ * Auto-branches if on the default (trunk) branch and autoBranch is enabled.
  */
 async function handleCommit(
 	pi: ExtensionAPI,
@@ -84,19 +91,13 @@ async function handleCommit(
 		return;
 	}
 
-	const currentBranch = await getCurrentBranch(pi);
-	if (currentBranch && isProtectedBranch(currentBranch, config.protectedBranches)) {
-		ctx.ui.notify(
-			`Cannot commit directly to "${currentBranch}". Switch to an agent branch first.`,
-			"warning",
-		);
-		return;
-	}
-
 	if (!ctx.hasUI) {
 		ctx.ui.notify("Commit requires interactive mode", "warning");
 		return;
 	}
+
+	// Auto-branch if on default branch (lazy branching)
+	await ensureBranchForCommit(pi, ctx, config);
 
 	const changedCount = await countChangedFiles(pi);
 
@@ -123,8 +124,15 @@ async function handleCommit(
 
 	const fullMessage = `${typeChoice}${scopePart}: ${message.trim()}`;
 
-	// Step 4: Confirm
-	const confirmed = await ctx.ui.confirm("Commit?", fullMessage);
+	// Step 4: Show files that will be staged and confirm
+	const files = await listChangedFiles(pi);
+	const fileList = files.slice(0, 20).map((f) => `  ${f}`).join("\n");
+	const more = files.length > 20 ? `\n  ... and ${files.length - 20} more` : "";
+
+	const confirmed = await ctx.ui.confirm(
+		"Commit?",
+		`${fullMessage}\n\nFiles to stage (git add -A):\n${fileList}${more}`,
+	);
 	if (!confirmed) {
 		ctx.ui.notify("Commit cancelled", "info");
 		return;

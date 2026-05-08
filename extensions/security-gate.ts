@@ -19,6 +19,11 @@
  *   - Outbound network with data upload/mutating methods (curl/wget -d/-X POST/etc., nc)
  *   - System modifications (launchctl, defaults write, crontab, xattr)
  *   - Git push to main/master (strong warning, detects implicit bare push on main)
+ *   - Git commit to main/master (strong warning)
+ *
+ * NOTE: Extension load order matters. git-workflow fires before security-gate
+ * (alphabetical), so its lazy auto-branching in tool_call creates a branch
+ * before we check if the commit targets a protected branch.
  *
  * Auto-allowed:
  *   - Everything else (ls, cat, grep, git status, etc.)
@@ -144,9 +149,10 @@ function checkEnvAccess(command: string): { blocked: boolean; prompt?: string; r
 	return { blocked: false };
 }
 
-// ── Git push to main ─────────────────────────────────────────
+// ── Git protected branches ────────────────────────────────────
 const GIT_PUSH_ANY = /\bgit\s+push\b/i;
 const GIT_PUSH_MAIN_EXPLICIT = /\bgit\s+push\b.*\b(main|master)\b/i;
+const GIT_COMMIT_ANY = /\bgit\s+commit\b/i;
 const PROTECTED_BRANCHES = new Set(["main", "master"]);
 
 async function isPushToProtectedBranch(command: string, ctx: any): Promise<boolean> {
@@ -158,6 +164,19 @@ async function isPushToProtectedBranch(command: string, ctx: any): Promise<boole
 	//    Only check when branch isn't explicitly named in the push command
 	const hasExplicitBranch = /\bgit\s+push\s+\S+\s+(?!HEAD)(?!--)/.test(command) && !/(?:^|\s)git\s+push\s*$/.test(command);
 	if (hasExplicitBranch && !GIT_PUSH_MAIN_EXPLICIT.test(command)) return false;
+
+	try {
+		const result = await ctx.exec("git", ["branch", "--show-current"], { timeout: 3000 });
+		const branch = result.stdout.trim();
+		return PROTECTED_BRANCHES.has(branch);
+	} catch {
+		// Can't detect branch — assume protected to be safe
+		return true;
+	}
+}
+
+async function isCommitOnProtectedBranch(command: string, ctx: any): Promise<boolean> {
+	if (!GIT_COMMIT_ANY.test(command)) return false;
 
 	try {
 		const result = await ctx.exec("git", ["branch", "--show-current"], { timeout: 3000 });
@@ -262,7 +281,29 @@ Allow the model to read this env var?`,
 			return undefined;
 		}
 
-		// 4. Prompted categories — user decides (AFK auto-allows)
+		// 4. Git commit on main — detect commits to protected branches
+		if (GIT_COMMIT_ANY.test(command)) {
+			const onProtected = await isCommitOnProtectedBranch(command, ctx);
+			if (onProtected) {
+				if (isTrustedAFK(ctx)) {
+					ctx.ui.notify("🚫 Commit to main/master blocked in AFK mode", "error");
+					return { block: true, reason: `Commit to main/master blocked in AFK: ${command}` };
+				}
+				if (!ctx.hasUI) {
+					return { block: true, reason: "Commit to main/master blocked (no UI)" };
+				}
+				const choice = await ctx.ui.select(
+					`🚨 COMMITTING TO MAIN/MASTER BRANCH!\n\n  ${truncate(command, 200)}\n\nThis is usually not recommended.`,
+					["No, block it", "Yes, I know what I'm doing"],
+				);
+				if (choice !== "Yes, I know what I'm doing") {
+					ctx.ui.notify("🚫 Commit to main blocked", "warning");
+					return { block: true, reason: "Commit to main blocked by user" };
+				}
+			}
+		}
+
+		// 5. Prompted categories — user decides (AFK auto-allows)
 		for (const { pattern, label } of PROMPTED) {
 			if (pattern.test(command)) {
 				// AFK in Docker — auto-allow prompted commands

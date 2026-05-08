@@ -6,6 +6,9 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { isGitRepo } from "./git-utils.js";
 
+/** Maximum checkpoints to keep per session (prune oldest beyond this). */
+const MAX_CHECKPOINTS = 20;
+
 /** Map of entry ID → stash ref for checkpoint restoration. */
 const checkpoints = new Map<string, string>();
 
@@ -39,6 +42,12 @@ export async function createCheckpoint(pi: ExtensionAPI): Promise<void> {
 	const ref = stdout.trim();
 	if (ref && currentEntryId) {
 		checkpoints.set(currentEntryId, ref);
+
+		// Prune oldest entries if we exceed the limit
+		if (checkpoints.size > MAX_CHECKPOINTS) {
+			const oldest = checkpoints.keys().next().value;
+			if (oldest) checkpoints.delete(oldest);
+		}
 	}
 }
 
@@ -54,7 +63,11 @@ export async function handleForkRestore(
 	const ref = checkpoints.get(entryId);
 	if (!ref) return;
 
-	if (!ctx.hasUI) return;
+	if (!ctx.hasUI) {
+		// Log that a checkpoint exists but can't restore without UI
+		console.log(`[git-workflow] Checkpoint ${entryId} exists but no UI to prompt restore`);
+		return;
+	}
 
 	const choice = await ctx.ui.select("Restore code state to this point?", [
 		"Yes, restore code to that checkpoint",
